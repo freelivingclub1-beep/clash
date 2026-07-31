@@ -114,6 +114,7 @@ export function hashMatchState(state: MatchState): number {
 
   for (const player of state.players) {
     fold(player.aetherPoints);
+    fold(player.aetherDestroyed);
     fold(player.crowns);
     fold(player.heroEntityId);
     fold(player.heroAbilityCooldown);

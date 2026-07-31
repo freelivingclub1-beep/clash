@@ -11,6 +11,20 @@
  * `RoyaleAPI/cr-api-data` dataset, at Tournament Standard (level 11), with
  * units converted from the game's internal thousandths to tiles and seconds:
  *
+ * The source stores each card's stats at *its own* level 1, which is not the
+ * same card level for every rarity — a Rare's level 1 is card level 3, an
+ * Epic's is level 6. Scaling to Tournament Standard therefore takes a
+ * different number of upgrade steps per rarity, published as
+ * `tournament_level_index` in `rarities.json`:
+ *
+ *   Common x2.56   Rare x2.12   Epic x1.60   Legendary x1.21   Champion x1.00
+ *
+ * Applying the Common multiplier to everything — which an earlier version of
+ * this table did — silently hands every Rare a 21% advantage and every Epic a
+ * 60% one over the cards they are balanced against. It is invisible in a
+ * one-card audit and shows up only as counters that mysteriously stop working:
+ * a 21%-oversized Musketeer survives the Goblins that are supposed to kill her.
+ *
  *   sight_range 5500      -> sightRange 5.5 tiles
  *   range 1200            -> attackRange 1.2 tiles
  *   hit_speed 1200        -> hitSpeed 1.2 seconds
@@ -77,8 +91,8 @@ export const CLASH_REFERENCE: Record<string, ClashReferenceStats> = {
   },
   'card_troop_musketeer': {
     crName: 'Musketeer',
-    baseHealth: 870,
-    damage: 263,
+    baseHealth: 721,
+    damage: 218,
     hitSpeed: 1,
     firstAttackDelay: 0.2,
     attackRange: 6,
@@ -90,8 +104,8 @@ export const CLASH_REFERENCE: Record<string, ClashReferenceStats> = {
   },
   'card_troop_giant': {
     crName: 'Giant',
-    baseHealth: 4940,
-    damage: 307,
+    baseHealth: 4092,
+    damage: 254,
     hitSpeed: 1.5,
     firstAttackDelay: 1,
     attackRange: 1.2,
@@ -103,8 +117,8 @@ export const CLASH_REFERENCE: Record<string, ClashReferenceStats> = {
   },
   'card_troop_hog_rider': {
     crName: 'HogRider',
-    baseHealth: 2048,
-    damage: 384,
+    baseHealth: 1696,
+    damage: 318,
     hitSpeed: 1.6,
     firstAttackDelay: 1,
     attackRange: 0.8,
@@ -116,8 +130,8 @@ export const CLASH_REFERENCE: Record<string, ClashReferenceStats> = {
   },
   'card_troop_mini_pekka': {
     crName: 'MiniPekka',
-    baseHealth: 1643,
-    damage: 870,
+    baseHealth: 1361,
+    damage: 721,
     hitSpeed: 1.6,
     firstAttackDelay: 1.1,
     attackRange: 0.8,
@@ -129,8 +143,8 @@ export const CLASH_REFERENCE: Record<string, ClashReferenceStats> = {
   },
   'card_troop_valkyrie': {
     crName: 'Valkyrie',
-    baseHealth: 2304,
-    damage: 322,
+    baseHealth: 1908,
+    damage: 267,
     hitSpeed: 1.5,
     firstAttackDelay: 1.4,
     attackRange: 1.2,
@@ -142,8 +156,8 @@ export const CLASH_REFERENCE: Record<string, ClashReferenceStats> = {
   },
   'card_troop_wizard': {
     crName: 'Wizard',
-    baseHealth: 870,
-    damage: 340,
+    baseHealth: 721,
+    damage: 282,
     hitSpeed: 1.4,
     firstAttackDelay: 1,
     attackRange: 5.5,
@@ -155,8 +169,8 @@ export const CLASH_REFERENCE: Record<string, ClashReferenceStats> = {
   },
   'card_troop_baby_dragon': {
     crName: 'BabyDragon',
-    baseHealth: 1843,
-    damage: 256,
+    baseHealth: 1152,
+    damage: 160,
     hitSpeed: 1.5,
     firstAttackDelay: 1.2,
     attackRange: 3.5,

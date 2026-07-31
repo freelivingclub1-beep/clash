@@ -51,9 +51,14 @@ export const SNARE = defineCard({
 /**
  * 3 aether. A precision spell: half the radius of Arrows, twice the damage.
  *
- * The breakpoint that matters is the Musketeer — this kills one outright, and
- * no other three-cost spell does. The price is that the blast is barely wider
- * than the unit itself, so being a tile off means killing nothing at all.
+ * It clears everything in the medium band — Archers, Minions, Goblins — from a
+ * blast barely wider than a single body, so being a tile off kills nothing at
+ * all. That accuracy is the whole card.
+ *
+ * What it deliberately does *not* do is kill a Musketeer. A three-cost that
+ * deleted a four-cost outright would be strictly better than the reference
+ * game's Fireball, which costs four and leaves her standing on a sliver; the
+ * spell is tuned to stop just short of her for the same reason.
  */
 export const SPLINTER_BOMB = defineCard({
   name: 'Splinter Bomb',
@@ -62,10 +67,10 @@ export const SPLINTER_BOMB = defineCard({
   category: 'Spell',
   aetherCost: 3,
   unlockArena: 6,
-  description: 'Tight, heavy blast. Kills a Musketeer if you land it exactly.',
+  description: 'Tight, heavy blast. Miss by a tile and it kills nothing.',
   tint: '#b5563c',
   baseHealth: 0,
-  damage: 740,
+  damage: 620,
   damageType: 'AreaSplash',
   splashRadius: 1.1,
   targetPriority: 'AirAndGround',

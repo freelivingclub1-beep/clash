@@ -78,6 +78,28 @@ export function AetherBar({ points, multiplier }: { points: number; multiplier: 
 
 export const MAX_AETHER_DISPLAY = MAX_AETHER_POINTS / AP_PER_AETHER;
 
+/**
+ * The running elixir trade: aether destroyed minus aether spent.
+ *
+ * Deliberately small and unobtrusive. It is a scoreboard for a skill the
+ * player is meant to be developing, not a call to action — a big flashing
+ * number would pull attention off the board, which is where the trades are
+ * actually made.
+ */
+export function TradeMeter({ trade }: { trade: number }) {
+  const sign = trade > 0 ? '+' : '';
+  const tone = trade > 0 ? 'trade-up' : trade < 0 ? 'trade-down' : 'trade-even';
+  return (
+    <div className={`trade-meter ${tone}`}>
+      <span className="trade-label">Trade</span>
+      <span className="trade-value">
+        {sign}
+        {trade}
+      </span>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Cards
 // ---------------------------------------------------------------------------

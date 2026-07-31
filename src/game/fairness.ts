@@ -21,7 +21,7 @@
 import { getCard, selectableCards } from '@cards/registry';
 import { createMatch, forceSpawn } from '@sim/state';
 import { stepMatch } from '@sim/tick';
-import { TICK_HZ } from '@sim/constants';
+import { AP_PER_AETHER, MAX_AETHER_POINTS, TICK_HZ } from '@sim/constants';
 import { BLUE, RED, TOWER_LAYOUTS } from '@sim/nav/grid';
 import type { CardDefinition } from '@cards/schema';
 import type { Entity, MatchState } from '@sim/types';
@@ -414,3 +414,164 @@ export function fairnessFlags(cards = testableCards()): FairnessFlag[] {
 
   return flags;
 }
+
+// ---------------------------------------------------------------------------
+// Skilled elixir trades
+// ---------------------------------------------------------------------------
+
+/**
+ * What one defensive play was worth, in aether.
+ *
+ * The engine now keeps this ledger itself — `aetherDestroyed` minus
+ * `aetherSpent` — so this measures the number the player is actually shown
+ * rather than a separate model of it.
+ */
+export interface TradeOutcome {
+  /** Aether of value destroyed minus aether committed. */
+  elixir: number;
+  /** Tower health conceded while the exchange resolved, as a fraction of one tower. */
+  conceded: number;
+  /**
+   * The whole exchange: elixir won, less what the leak cost.
+   *
+   * A defence is not scored in elixir alone. Killing a Hog Rider for a
+   * two-aether profit is a *loss* if it connected three times first, and that
+   * is the half of the exchange placement actually controls — the elixir
+   * result of swarm-versus-tank is much the same wherever you drop it, but the
+   * damage you concede getting there is not. `CONCEDE_WEIGHT` prices a whole
+   * princess tower at the aether it would take to rebuild the tempo, so the
+   * two halves are commensurable.
+   */
+  net: number;
+  threatKilled: boolean;
+  /** Fraction of the threat still standing when the exchange ended. */
+  threatRemaining: number;
+}
+
+/** Aether a full princess tower's worth of conceded damage is charged at. */
+const CONCEDE_WEIGHT = 10;
+
+/**
+ * Rows a defender might drop an answer on, from "right on top of the threat"
+ * to "back at the tower". These are the placements a real player chooses
+ * between, and the spread across them is what makes a card skill-expressive.
+ */
+const ANSWER_ROWS = [13, 11, 9, 7] as const;
+
+/**
+ * Play `answerId` against `threatId` at a given row and score the exchange.
+ *
+ * The threat always walks down the left lane from row 14, so a low row is a
+ * late, defensive answer under the player's own tower and a high row is an
+ * early one out in the open.
+ */
+export function defensiveTrade(threatId: string, answerId: string, row: number): TradeOutcome | null {
+  const state = fixture(33);
+  const threat = forceSpawn(state, RED, threatId, 3, 14);
+  threat.deployTimer = 0;
+
+  // The tower the threat is walking at. What it takes off this is the other
+  // half of the trade, and the half that answers to placement.
+  const defended = state.entities.filter((e) => e.kind === 'tower' && e.team === BLUE);
+  const towerHpBefore = defended.reduce((sum, t) => sum + t.hp, 0);
+  const towerMax = Math.max(1, ...defended.map((t) => t.maxHp));
+
+  state.players[BLUE].hand[0] = answerId;
+  state.players[BLUE].aetherPoints = MAX_AETHER_POINTS;
+  stepMatch(state, [{ type: 'deploy', team: BLUE, handIndex: 0, tileX: 3, tileY: row }]);
+
+  const answered = state.entities.some(
+    (e) => e.alive && e.team === BLUE && e.cardId === answerId,
+  );
+  // The placement was illegal — not a bad trade, just not a trade.
+  if (!answered) return null;
+
+  const limit = Math.round(30 * TICK_HZ);
+  for (let tick = 0; tick < limit; tick++) {
+    stepMatch(state);
+    const survivors = state.entities.some(
+      (e) => e.alive && e.team === BLUE && e.cardId === answerId,
+    );
+    if (!threat.alive || !survivors) break;
+  }
+
+  const player = state.players[BLUE];
+  const elixir = (player.aetherDestroyed - player.aetherSpent) / AP_PER_AETHER;
+  const towerHpAfter = defended.reduce((sum, t) => sum + (t.alive ? t.hp : 0), 0);
+  const conceded = Math.max(0, towerHpBefore - towerHpAfter) / towerMax;
+
+  return {
+    elixir,
+    conceded,
+    net: elixir - conceded * CONCEDE_WEIGHT,
+    threatKilled: !threat.alive,
+    threatRemaining: threat.alive ? threat.hp / threat.maxHp : 0,
+  };
+}
+
+export interface SkillSpread {
+  threatId: string;
+  answerId: string;
+  best: number;
+  worst: number;
+  /** How much the same two cards swing on placement alone. */
+  spread: number;
+}
+
+/**
+ * How much placement is worth for one matchup.
+ *
+ * This is the measurement the roster never had. `tradeValue` deliberately
+ * strips placement out — it stages a head-on fight to ask whether a card is
+ * broken — which means nothing in the project checked the opposite and more
+ * important question: does *where* you put a card change what it is worth?
+ *
+ * A spread of zero is the bad case. It means the matchup resolves the same way
+ * however carefully it is played, and a card that trades identically wherever
+ * it lands is a card that plays itself.
+ */
+export function skillSpread(threatId: string, answerId: string): SkillSpread {
+  const results = ANSWER_ROWS.map((row) => defensiveTrade(threatId, answerId, row)).filter(
+    (r): r is TradeOutcome => r !== null,
+  );
+  const nets = results.map((r) => r.net);
+  const best = nets.length ? Math.max(...nets) : 0;
+  const worst = nets.length ? Math.min(...nets) : 0;
+  return {
+    threatId,
+    answerId,
+    best: Math.round(best * 10) / 10,
+    worst: Math.round(worst * 10) / 10,
+    spread: Math.round((best - worst) * 10) / 10,
+  };
+}
+
+/**
+ * Matchups the game is expected to reward skill in.
+ *
+ * Each pairs an expensive threat with a cheaper card that must beat it, so a
+ * threat cannot quietly become unanswerable. What makes the list worth having
+ * is that the answers are not interchangeable: which cheap card wins depends on
+ * how the threat deals its damage, and getting that backwards is a losing play
+ * rather than a slightly worse one.
+ *
+ * An earlier version of this list asserted that Goblins answer a Musketeer.
+ * They do not, and they do not in the reference game either — she one-shots a
+ * Goblin and out-paces the three of them. That it *appeared* to be merely a
+ * near-miss was a symptom: the Musketeer was carrying 21% more health and
+ * damage than she should have (see `@cards/clashReference`). A matchup table
+ * asserting things the simulation disagrees with is only useful if the
+ * disagreement is investigated rather than tuned away.
+ */
+export const SKILL_MATCHUPS: ReadonlyArray<{ threat: string; answer: string }> = [
+  // Single-target bruisers die to bodies: they can only swing at one at a time.
+  { threat: 'card_troop_mini_pekka', answer: 'card_troop_skeletons' },
+  { threat: 'card_troop_giant', answer: 'card_troop_goblins' },
+  { threat: 'card_troop_hog_rider', answer: 'card_troop_skeletons' },
+  // Splash and one-shot damage invert that: a swarm fed to either is a
+  // donation, so the cheap answer has to be a single tough body instead.
+  { threat: 'card_troop_valkyrie', answer: 'card_troop_knight' },
+  { threat: 'card_troop_musketeer', answer: 'card_troop_knight' },
+  // A melee bruiser with no reach is answered from outside it.
+  { threat: 'card_troop_ronin', answer: 'card_troop_archers' },
+];

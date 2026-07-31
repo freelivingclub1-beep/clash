@@ -895,3 +895,44 @@ body {
   font-size: clamp(8px, 2.2vw, 11px);
   line-height: 1.25;
 }
+
+/* --- elixir trade readout ------------------------------------------------ */
+
+.trade-meter {
+  position: absolute;
+  right: 2.5%;
+  transform: translateY(-118%);
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: rgba(12, 15, 22, 0.72);
+  border: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.trade-meter .trade-label {
+  font-size: clamp(7px, 1.8vw, 10px);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.trade-meter .trade-value {
+  font-size: clamp(11px, 3vw, 16px);
+  font-weight: 800;
+}
+
+.trade-up .trade-value,
+span.trade-up {
+  color: var(--ok);
+}
+.trade-down .trade-value,
+span.trade-down {
+  color: var(--danger);
+}
+.trade-even .trade-value {
+  color: var(--muted);
+}

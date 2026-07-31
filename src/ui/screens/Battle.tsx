@@ -34,6 +34,7 @@ import {
   AetherBar,
   MatchTimer,
   NextCard,
+  TradeMeter,
 } from '../battle/Hud';
 import { DragPortrait } from '../CardFace';
 
@@ -57,6 +58,7 @@ const EMPTY_HUD: HudSnapshot = {
   abilityReady: false,
   abilityCooldownSeconds: 0,
   heroOnField: false,
+  aetherTrade: 0,
 };
 
 export function Battle({ config, localTeam, opponentName, onExit }: BattleProps) {
@@ -364,6 +366,10 @@ export function Battle({ config, localTeam, opponentName, onExit }: BattleProps)
 
         <div className="battle-hud">
           <AetherBar points={hud.aether} multiplier={multiplier} />
+          {/* The running trade. A player cannot learn to make good trades
+              without being told what their trades are — this is the number the
+              whole skill of the genre is measured in, and it was nowhere. */}
+          <TradeMeter trade={hud.aetherTrade} />
           <div className="hand-row">
             <NextCard cardId={player.queue[0]} />
             <div className="hand-cards">
@@ -422,7 +428,18 @@ export function Battle({ config, localTeam, opponentName, onExit }: BattleProps)
             </div>
             <div className="stat-line">
               <span className="label">Aether spent</span>
-              <span>{Math.round(player.aetherSpent / 84)}</span>
+              <span>{Math.round(player.aetherSpent / AP_PER_AETHER)}</span>
+            </div>
+            <div className="stat-line">
+              <span className="label">Aether destroyed</span>
+              <span>{Math.round(player.aetherDestroyed / AP_PER_AETHER)}</span>
+            </div>
+            <div className="stat-line">
+              <span className="label">Elixir trade</span>
+              <span className={hud.aetherTrade >= 0 ? 'trade-up' : 'trade-down'}>
+                {hud.aetherTrade >= 0 ? '+' : ''}
+                {hud.aetherTrade}
+              </span>
             </div>
             <div className="stat-line">
               <span className="label">Tower damage dealt</span>

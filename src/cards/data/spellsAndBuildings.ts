@@ -18,7 +18,7 @@ export const FIREBALL = defineCard({
   description: 'Annnnnd... Fireball. Deals high area damage and knocks back survivors.',
   tint: '#e0703f',
   baseHealth: 0,
-  damage: 832,
+  damage: 689,
   damageType: 'AreaSplash',
   splashRadius: 2.5,
   attackRange: 0,

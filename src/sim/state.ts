@@ -96,6 +96,7 @@ function createPlayerState(team: Team, config: MatchPlayerConfig, shuffleRng: Rn
     crowns: 0,
     deployRights: { laneOpen: [false, false] },
     aetherSpent: 0,
+    aetherDestroyed: 0,
     cardsPlayed: 0,
   };
 }

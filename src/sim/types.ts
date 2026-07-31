@@ -181,6 +181,18 @@ export interface PlayerState {
   deployRights: DeployRights;
   /** Aether spent this match — surfaced in the post-match summary. */
   aetherSpent: number;
+  /**
+   * Aether points' worth of enemy cards this player has destroyed.
+   *
+   * The other half of an elixir trade, and the half the game never showed. A
+   * player could see what a push cost them and never what it cost the
+   * opponent, which is the number the whole skill of the genre is measured in.
+   *
+   * Counted per *body*, not per card: killing one of three Skeletons is worth a
+   * third of a Skeletons card, so trading into a swarm you only half-clear is
+   * scored honestly rather than as a full kill.
+   */
+  aetherDestroyed: number;
   /** Cards deployed this match, for the same summary. */
   cardsPlayed: number;
 }

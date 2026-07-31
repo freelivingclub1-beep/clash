@@ -9,10 +9,11 @@
 
 import { getCard } from '@cards/registry';
 import { fx } from '../math/fixed';
-import { setOccupied, TOWER_LAYOUTS } from '../nav/grid';
+import { enemyOf, setOccupied, TOWER_LAYOUTS } from '../nav/grid';
 import { applyDamageAtPoint, releaseLocksOn } from './combat';
 import { findEntity, formationOffsets, resolveStats, spawnTroop } from '../entities';
 import { passiveHooks } from '../scripts/passives';
+import { AP_PER_AETHER } from '../constants';
 import { type Entity, type MatchState, NO_TARGET } from '../types';
 
 function runDeathEffect(state: MatchState, entity: Entity): void {
@@ -69,6 +70,21 @@ function runDeathEffect(state: MatchState, entity: Entity): void {
   }
 }
 
+/**
+ * Credit the opposing player with what this body was worth.
+ *
+ * Towers are excluded: crowns already score those, and folding a tower's
+ * nominal aether cost into a trade ledger would swamp every troop trade in the
+ * match with one number.
+ */
+function creditKill(state: MatchState, entity: Entity): void {
+  if (entity.kind === 'tower') return;
+  const card = resolveStats(entity.cardId, entity.level, entity.evolved).card;
+  const bodies = Math.max(1, card.spawnCount);
+  const worth = Math.round((card.aetherCost * AP_PER_AETHER) / bodies);
+  state.players[enemyOf(entity.team)].aetherDestroyed += worth;
+}
+
 export function deaths(state: MatchState): void {
   if (!state.needsCompaction) return;
 
@@ -85,6 +101,7 @@ export function deaths(state: MatchState): void {
       y: entity.y,
     });
 
+    creditKill(state, entity);
     runDeathEffect(state, entity);
 
     // Death passives run alongside the card's declared death effect; a card

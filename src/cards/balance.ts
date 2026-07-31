@@ -46,14 +46,19 @@ export const DAMAGE_WINDOW_SECONDS = 5;
  * counterparts with the reference game's own numbers (see `@cards/clashReference`),
  * and at this factor those seventeen audit at a median of exactly 1.00.
  *
- * It was 0.65, calibrated against our own roster before those numbers were
- * adopted — which was circular, and wrong by about a quarter: under the old
- * value a real Giant, Valkyrie, Mini P.E.K.K.A. and Baby Dragon all audited
- * around 1.65, i.e. the model insisted the reference game's most-played cards
- * were two-thirds over budget. When a model disagrees that hard with a decade
- * of live balancing, the model is what needs moving.
+ * It briefly sat at 0.77, and that is worth recording as a cautionary tale.
+ * The reference stats it was fitted to were wrong — every Rare had been scaled
+ * to Tournament Standard with the *Common* multiplier, inflating it 21% (and
+ * every Epic 60%). Fitting the model to those numbers moved the constant to
+ * absorb the error, so the audit went quiet and the roster looked balanced
+ * while Rares were systematically oversized. Correcting the source data put
+ * this back within a hair of the 0.65 it started at.
+ *
+ * The lesson is about direction of fit: this constant may be tuned to match
+ * the reference cards, but it must never be tuned to make a disagreement go
+ * away. A model that suddenly needs a 15% nudge is reporting a data bug.
  */
-export const STAT_EFFICIENCY = 0.77;
+export const STAT_EFFICIENCY = 0.67;
 
 /**
  * Extra budget per additional unit in a swarm.

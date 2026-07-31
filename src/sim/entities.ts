@@ -391,12 +391,31 @@ const DIR12: ReadonlyArray<readonly [Fx, Fx]> = [
  */
 export function formationOffsets(count: number): Array<readonly [Fx, Fx]> {
   if (count <= 1) return [[0, 0]];
+
   const offsets: Array<readonly [Fx, Fx]> = [];
+  const perRing = 6;
+
   for (let i = 0; i < count; i++) {
-    const ring = Math.floor(i / 6);
-    const slot = i % 6;
-    // Alternate rings are rotated 30 degrees so units do not line up radially.
-    const dir = DIR12[(slot * 2 + (ring % 2)) % 12];
+    const ring = Math.floor(i / perRing);
+    const slot = i % perRing;
+    /*
+     * Spread evenly around the *whole* circle, not around a fixed six-slot
+     * wheel.
+     *
+     * The old version always took the first `n` of six fixed directions, so a
+     * three-body card spawned in a 120-degree fan on one side of the drop
+     * point instead of a triangle around it. That quietly broke the single
+     * most important placement play in the genre: dropping a swarm on top of a
+     * single-target bruiser is supposed to surround it, so it can only face
+     * one body while the other two hit its back. Instead all three arrived on
+     * the same flank, in front of it, and got cut down one at a time.
+     */
+    const inRing = Math.min(count - ring * perRing, perRing);
+    const step = 12 / inRing;
+    // Alternate rings are offset by half a step so units do not line up radially.
+    const index = Math.round(slot * step + (ring % 2) * (step / 2)) % 12;
+
+    const dir = DIR12[index];
     const radius = fx(0.5 + ring * 0.5);
     offsets.push([fxMul(dir[0], radius), fxMul(dir[1], radius)]);
   }

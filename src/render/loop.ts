@@ -13,6 +13,7 @@
 
 import type { MatchRunner } from '@game/match';
 import type { Team } from '@sim/types';
+import { AP_PER_AETHER } from '@sim/constants';
 import { drawArena, drawDeployOverlay, drawPlacementGhost } from './arena';
 import { drawEntities, drawEffects } from './entities';
 import {
@@ -49,6 +50,11 @@ export interface HudSnapshot {
   abilityReady: boolean;
   abilityCooldownSeconds: number;
   heroOnField: boolean;
+  /**
+   * Running elixir trade, in whole aether: what you have destroyed minus what
+   * you have spent. Positive means you are ahead on trades.
+   */
+  aetherTrade: number;
 }
 
 export class BattleRenderer {
@@ -201,6 +207,7 @@ export class BattleRenderer {
       abilityReady: local.heroAbilityCooldown === 0 && local.heroEntityId !== -1,
       abilityCooldownSeconds: Math.ceil(local.heroAbilityCooldown / 30),
       heroOnField: local.heroEntityId !== -1,
+      aetherTrade: Math.round((local.aetherDestroyed - local.aetherSpent) / AP_PER_AETHER),
     });
   }
 }
