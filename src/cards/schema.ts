@@ -57,12 +57,26 @@ export type AbilityTargetFilter = (typeof ABILITY_TARGET_FILTERS)[number];
  * schema rather than in the sim so that the dependency only ever points one
  * way: sim -> cards, never back.
  */
+/**
+ * Movement speeds in tiles per minute.
+ *
+ * These are Clash Royale's actual values, and the whole table used to be one
+ * tier too fast: our "Medium" was 90, which is Clash Royale's *Fast*. Every
+ * unit in the game moved like the tier above it.
+ *
+ * That is not a cosmetic difference. It is a third off the time between a push
+ * appearing and it reaching what it is walking at, which is exactly the window
+ * a player has to read the push, pick a card and drag it out — and a card
+ * still owes a second of deploy freeze on top. Dropping a tank in front of a
+ * push kept landing behind the fight, and the targeting looked broken when the
+ * real problem was that there was never time to place anything.
+ */
 export const SPEED_TILES_PER_MIN: Record<SpeedClass, number> = {
-  VerySlow: 45,
-  Slow: 60,
-  Medium: 90,
-  Fast: 120,
-  VeryFast: 150,
+  VerySlow: 30,
+  Slow: 45,
+  Medium: 60,
+  Fast: 90,
+  VeryFast: 120,
 };
 
 /** Card ids are derived, never typed by hand: `card_<category>_<slug>`. */

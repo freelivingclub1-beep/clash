@@ -17,7 +17,7 @@ import { fxToFloat } from '@sim/math/fixed';
 import { applyStatus, applyDamageAtPoint, releaseLocksOn } from '@sim/systems/combat';
 import { auditCard, SHIELD_EPP_WEIGHT } from '@cards/balance';
 import { hasPassive } from '@sim/scripts/passives';
-import type { Command, MatchState } from '@sim/types';
+import type { Command, Entity, MatchState } from '@sim/types';
 
 /** CHARGE_SPEED_MULTIPLIER is Q16.16; compare against it as a plain number. */
 const CHARGE_SPEED_MULTIPLIER_FLOAT = fxToFloat(CHARGE_SPEED_MULTIPLIER);
@@ -130,14 +130,26 @@ describe('charge', () => {
     expect(auditCard(getCard(charger)).withinTolerance).toBe(true);
   });
 
+  /**
+   * Step until the charge triggers, up to `seconds`.
+   *
+   * Not a fixed window: the threshold is a *distance*, so any change to how
+   * fast units move changes how long it takes to cover. A fixed five-second
+   * step silently encoded the old movement speeds, and broke the moment those
+   * were corrected to the reference game's — which was a test asserting the
+   * bug, not the behaviour.
+   */
+  const runUntilCharging = (state: MatchState, unit: Entity, seconds = 12): void => {
+    for (let i = 0; i < TICK_HZ * seconds && !unit.charging; i++) stepMatch(state);
+  };
+
   it('enters the charge state after enough uninterrupted travel', () => {
     const state = newMatch();
-    const unit = play(state, charger, 8, 10)[0];
+    const unit = play(state, charger, 8, 8)[0];
     expect(unit.charging).toBe(false);
 
-    stepMatchBy(state, TICK_HZ * 5);
+    runUntilCharging(state, unit);
     expect(unit.charging).toBe(true);
-    expect(state.events.some((e) => e.type === 'charge') || unit.charging).toBe(true);
   });
 
   it('moves faster while charging', () => {
@@ -179,8 +191,8 @@ describe('charge', () => {
 
   it('a stun breaks the charge outright', () => {
     const state = newMatch();
-    const unit = play(state, charger, 8, 10)[0];
-    stepMatchBy(state, TICK_HZ * 5);
+    const unit = play(state, charger, 8, 8)[0];
+    runUntilCharging(state, unit);
     expect(unit.charging).toBe(true);
 
     unit.stunTicks = 10;
@@ -191,8 +203,8 @@ describe('charge', () => {
 
   it('a knockback breaks the charge', () => {
     const state = newMatch();
-    const unit = play(state, charger, 8, 10)[0];
-    stepMatchBy(state, TICK_HZ * 5);
+    const unit = play(state, charger, 8, 8)[0];
+    runUntilCharging(state, unit);
     expect(unit.charging).toBe(true);
 
     applyStatus(getCard('card_spell_fireball'), unit, 10);

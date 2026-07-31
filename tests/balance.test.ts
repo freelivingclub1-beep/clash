@@ -259,7 +259,7 @@ describe('spell breakpoints', () => {
   it('caps direct spell damage against Crown Towers', () => {
     expect(CROWN_TOWER_DAMAGE_FACTOR).toBeGreaterThanOrEqual(0.3);
     expect(CROWN_TOWER_DAMAGE_FACTOR).toBeLessThanOrEqual(0.35);
-    expect(crownTowerDamage(1000)).toBe(320);
+    expect(crownTowerDamage(1000)).toBe(300);
   });
 
   it('applies that cap in the simulation, not just on paper', () => {

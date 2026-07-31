@@ -100,15 +100,19 @@ export const TARGET_LOSE_RANGE_FACTOR: Fx = fx(1.4);
  * The margin is the hysteresis: a candidate has to be *meaningfully* nearer,
  * not a hair nearer, or two enemies at roughly equal range would trade the
  * lock back and forth every scan and the unit would stand there twitching.
- * 4/5 means "at least 20% closer".
+ * 9/10 means "at least 10% closer". Clash Royale itself applies no margin at
+ * all here — no card in its data sets `retarget_each_tick`, so its locks are
+ * sticky like ours, and what actually makes a blocker work there is that the
+ * push has time to be blocked. Ours only needs enough of a margin to stop
+ * jitter, so it is kept small.
  *
  * Expressed as a numerator and denominator, and compared in squared distance,
  * so the whole test is exact integer arithmetic — no square roots, no
  * float division, nothing that could round differently between two machines
  * running the same match.
  */
-export const RETARGET_CLOSER_NUMERATOR = 4;
-export const RETARGET_CLOSER_DENOMINATOR = 5;
+export const RETARGET_CLOSER_NUMERATOR = 9;
+export const RETARGET_CLOSER_DENOMINATOR = 10;
 
 /** Boids separation strength, scaled per-entity by inverse mass. */
 export const SEPARATION_STRENGTH: Fx = fx(0.35);

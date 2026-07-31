@@ -40,11 +40,20 @@ export const DAMAGE_WINDOW_SECONDS = 5;
  * Share of the raw allowance that actually becomes health and damage.
  *
  * The rest is the implicit cost of simply *being* a unit — occupying board
- * space, drawing fire, having a deploy time and a body that blocks. Calibrated
- * against the canonical roster: with this factor the median card audits at
- * 1.00, which is what makes the tolerance band meaningful rather than arbitrary.
+ * space, drawing fire, having a deploy time and a body that blocks.
+ *
+ * Calibrated against Clash Royale itself. Seventeen of our cards are direct
+ * counterparts with the reference game's own numbers (see `@cards/clashReference`),
+ * and at this factor those seventeen audit at a median of exactly 1.00.
+ *
+ * It was 0.65, calibrated against our own roster before those numbers were
+ * adopted — which was circular, and wrong by about a quarter: under the old
+ * value a real Giant, Valkyrie, Mini P.E.K.K.A. and Baby Dragon all audited
+ * around 1.65, i.e. the model insisted the reference game's most-played cards
+ * were two-thirds over budget. When a model disagrees that hard with a decade
+ * of live balancing, the model is what needs moving.
  */
-export const STAT_EFFICIENCY = 0.65;
+export const STAT_EFFICIENCY = 0.77;
 
 /**
  * Extra budget per additional unit in a swarm.
@@ -122,10 +131,13 @@ export const AIR_AND_GROUND_DPS_MULTIPLIER = 0.85;
 export const BUILDINGS_ONLY_DPS_MULTIPLIER = 1.25;
 
 /**
- * Direct spell damage to Crown Towers is capped at a third of its troop
+ * Direct spell damage to Crown Towers is capped at this share of its troop
  * damage, so no deck can win by chipping towers from hand.
+ *
+ * Clash Royale's own figure: every damage spell in its data carries
+ * `crown_tower_damage_percent: -70`, i.e. towers take 30%.
  */
-export const CROWN_TOWER_DAMAGE_FACTOR = 0.32;
+export const CROWN_TOWER_DAMAGE_FACTOR = 0.3;
 
 export type RangeBand = keyof typeof RANGE_HP_MULTIPLIER;
 export type SplashBand = keyof typeof SPLASH_DPS_MULTIPLIER;
@@ -524,67 +536,69 @@ export interface SpellBreakpoint {
 
 export const SPELL_BREAKPOINTS: readonly SpellBreakpoint[] = [
   {
+    /*
+     * Zap does not kill Goblins, and that is the correct, current Clash
+     * Royale interaction rather than an oversight: 192 damage against 202
+     * health leaves them standing on ten. It is exactly why a Zap deck still
+     * has to carry a second answer to a Goblin pack.
+     */
     spellId: 'card_spell_zap',
-    mustKill: ['card_troop_skeletons', 'card_troop_goblins', 'card_troop_spear_goblins'],
-    mustSurvive: [{ cardId: 'card_troop_archers', minHealthFraction: 0.2 }],
+    mustKill: ['card_troop_skeletons', 'card_troop_spear_goblins'],
+    mustSurvive: [
+      { cardId: 'card_troop_goblins', minHealthFraction: 0.02 },
+      { cardId: 'card_troop_archers', minHealthFraction: 0.3 },
+    ],
   },
   {
+    // Arrows clears the swarm tier and leaves Archers alive on sixteen health.
     spellId: 'card_spell_arrows',
     mustKill: [
       'card_troop_skeletons',
       'card_troop_goblins',
       'card_troop_spear_goblins',
       'card_troop_minions',
-      'card_troop_archers',
     ],
-    mustSurvive: [{ cardId: 'card_troop_musketeer', minHealthFraction: 0.3 }],
+    mustSurvive: [{ cardId: 'card_troop_archers', minHealthFraction: 0.02 }],
   },
   {
-    // Sunbeam is a tight burst: it clears the swarm tier like Arrows but over
-    // a much smaller radius, and must still leave a Musketeer standing or it
-    // would simply be a cheaper Fireball.
+    // Sunbeam is our own card: Arrows' kill list over a much tighter blast,
+    // which is what a whole aether of radius is worth.
     spellId: 'card_spell_sunbeam',
     mustKill: [
       'card_troop_skeletons',
       'card_troop_goblins',
       'card_troop_spear_goblins',
       'card_troop_minions',
-      'card_troop_archers',
     ],
     mustSurvive: [{ cardId: 'card_troop_musketeer', minHealthFraction: 0.35 }],
   },
   {
-    // Glacier buys time rather than trading. It must not double as a cheap
-    // Arrows, so it is required to leave even Archers alive.
-    spellId: 'card_spell_glacier',
-    mustKill: ['card_troop_skeletons'],
-    mustSurvive: [
-      { cardId: 'card_troop_archers', minHealthFraction: 0.5 },
-      { cardId: 'card_troop_goblins', minHealthFraction: 0.3 },
-    ],
-  },
-  {
+    /*
+     * Fireball does not kill a Musketeer either — 832 against 870 leaves
+     * thirty-eight. That single interaction is most of what makes Fireball a
+     * skill card in the reference game: it needs a tower tick, a Zap, or a
+     * higher level to finish the job, and playing it as though it were lethal
+     * is the mistake.
+     */
     spellId: 'card_spell_fireball',
-    // Glass-cannon ranged troops must die; mini-tanks must live at roughly 40%.
-    mustKill: ['card_troop_musketeer', 'card_troop_wizard', 'card_troop_archers'],
+    mustKill: ['card_troop_archers', 'card_troop_minions', 'card_troop_goblins'],
     mustSurvive: [
+      { cardId: 'card_troop_musketeer', minHealthFraction: 0.02 },
+      { cardId: 'card_troop_wizard', minHealthFraction: 0.02 },
       { cardId: 'card_troop_knight', minHealthFraction: 0.3 },
-      { cardId: 'card_troop_valkyrie', minHealthFraction: 0.5 },
     ],
   },
   {
     /*
-     * Splinter Bomb is a Fireball breakpoint at a Fireball damage number, for
-     * one less aether — and that is fine only because of the radius. It kills
-     * the same glass cannons and leaves the same mini-tanks standing, but its
-     * blast is barely wider than a single body, so hitting the thing you meant
-     * to hit is the entire cost of the discount.
+     * Splinter Bomb is Fireball's kill list for one less aether, bought with
+     * a blast barely wider than a single body. It cannot finish a Musketeer
+     * either — nothing at this cost should.
      */
     spellId: 'card_spell_splinter_bomb',
-    mustKill: ['card_troop_musketeer', 'card_troop_wizard', 'card_troop_archers'],
+    mustKill: ['card_troop_archers', 'card_troop_minions', 'card_troop_goblins'],
     mustSurvive: [
-      { cardId: 'card_troop_knight', minHealthFraction: 0.3 },
-      { cardId: 'card_troop_valkyrie', minHealthFraction: 0.5 },
+      { cardId: 'card_troop_musketeer', minHealthFraction: 0.1 },
+      { cardId: 'card_troop_knight', minHealthFraction: 0.4 },
     ],
   },
 ];
