@@ -21,6 +21,7 @@ import type { Entity, MatchState, Team } from '@sim/types';
 import type { MatchRunner } from '@game/match';
 import { TILE_W, TILE_H, tileToLogical } from './camera';
 import { spriteFor } from './sprites';
+import { texturePattern } from './textures';
 
 const TEAM_COLOURS: Record<Team, { primary: string; dark: string }> = {
   0: { primary: '#4a9eff', dark: '#1b4f8a' },
@@ -171,10 +172,17 @@ function drawBuilding(
   if (!card) return;
   const size = Math.max(24, fxToFloat(entity.radius) * TILE_W * 2.4);
 
-  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
   ctx.beginPath();
-  ctx.ellipse(screenX, screenY, size * 0.45, size * 0.2, 0, 0, Math.PI * 2);
+  ctx.ellipse(screenX, screenY, size * 0.5, size * 0.22, 0, 0, Math.PI * 2);
   ctx.fill();
+
+  // A stone footing under every placed building, so it sits on the ground
+  // rather than hovering over it.
+  ctx.fillStyle = texturePattern(ctx, 'stone');
+  ctx.fillRect(screenX - size * 0.42, screenY - 8, size * 0.84, 10);
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.fillRect(screenX - size * 0.42, screenY, size * 0.84, 3);
 
   const sprite = spriteFor(card, entity.team, 0);
   ctx.drawImage(sprite.source, screenX - size / 2, screenY - size, size, size);
@@ -195,6 +203,14 @@ function drawBuilding(
   }
 }
 
+/**
+ * Crown towers: a textured stone keep on a stepped plinth, with battlements,
+ * an arrow slit, a corner turret pair, a banner and a roof.
+ *
+ * Damage is shown structurally rather than only on the health bar — cracks
+ * appear as the tower is worn down and the merlons break away, so the state of
+ * the board is readable from the towers themselves.
+ */
 function drawTower(
   ctx: CanvasRenderingContext2D,
   entity: Entity,
@@ -204,31 +220,185 @@ function drawTower(
   const layout = TOWER_LAYOUTS[entity.towerIndex];
   const isKing = layout?.kind === 'king';
   const tiles = isKing ? 4 : 3;
-  const width = tiles * TILE_W * 0.72;
-  const height = tiles * TILE_H * 1.35;
+  /*
+   * King towers are drawn wide and squat, princess towers narrow and tall.
+   *
+   * Not a style choice: a king tower's footprint sits two tiles from the back
+   * of the grid, so it has ~5 tiles of vertical room. Drawn at the princess
+   * tower's proportions it was 6 tiles tall and the far one was sliced off by
+   * the top of the field. Width carries the "this is the big one" read
+   * instead, and it survives the clip.
+   */
+  const width = tiles * TILE_W * (isKing ? 0.8 : 0.68);
+  const height = tiles * TILE_H * (isKing ? 1.0 : 1.45);
   const colours = TEAM_COLOURS[entity.team];
+  const health = Math.max(0, Math.min(1, entity.hp / entity.maxHp));
 
-  // screenY is the footprint's centre. Sit the keep on that centre with a
-  // modest lift, so the structure reads as standing *on* its platform rather
-  // than floating above it.
   const footprintHalf = (tiles * TILE_H) / 2;
   const base = screenY + footprintHalf;
   const top = base - height;
+  const left = screenX - width / 2;
 
-  ctx.fillStyle = colours.dark;
-  ctx.fillRect(screenX - width / 2, top, width, height);
-  ctx.fillStyle = entity.dormant ? '#6a7078' : colours.primary;
-  ctx.fillRect(screenX - width / 2 + 6, top + 6, width - 12, height - 12);
+  const stone = texturePattern(ctx, entity.team === 0 ? 'stoneBlue' : 'stoneRed');
+  const plainStone = texturePattern(ctx, 'stone');
 
-  // Crenellations, purely so a tower reads as a tower.
-  ctx.fillStyle = colours.dark;
-  const merlons = isKing ? 5 : 4;
-  for (let i = 0; i < merlons; i++) {
-    const w = width / (merlons * 2 - 1);
-    ctx.fillRect(screenX - width / 2 + i * w * 2, top - 10, w, 14);
+  ctx.save();
+
+  // Ground shadow.
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  ctx.beginPath();
+  ctx.ellipse(screenX, base, width * 0.62, TILE_H * 0.55, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // --- stepped plinth ------------------------------------------------------
+  ctx.fillStyle = plainStone;
+  ctx.fillRect(left - 10, base - 14, width + 20, 14);
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.fillRect(left - 10, base - 4, width + 20, 4);
+  ctx.fillStyle = plainStone;
+  ctx.fillRect(left - 5, base - 24, width + 10, 12);
+  ctx.fillStyle = 'rgba(255,255,255,0.1)';
+  ctx.fillRect(left - 5, base - 24, width + 10, 2);
+
+  // --- main keep -----------------------------------------------------------
+  const bodyTop = top + 14;
+  const bodyHeight = base - 22 - bodyTop;
+  ctx.fillStyle = stone;
+  ctx.fillRect(left, bodyTop, width, bodyHeight);
+
+  // A dormant king tower is desaturated, which is how "not yet awake" reads.
+  if (entity.dormant) {
+    ctx.fillStyle = 'rgba(90,96,108,0.55)';
+    ctx.fillRect(left, bodyTop, width, bodyHeight);
   }
 
-  healthBar(ctx, screenX, top - 26, width * 1.15, entity.hp / entity.maxHp, entity.team);
+  // Form shading: lit from the upper left.
+  const shading = ctx.createLinearGradient(left, 0, left + width, 0);
+  shading.addColorStop(0, 'rgba(255,255,255,0.16)');
+  shading.addColorStop(0.45, 'rgba(255,255,255,0)');
+  shading.addColorStop(1, 'rgba(0,0,0,0.32)');
+  ctx.fillStyle = shading;
+  ctx.fillRect(left, bodyTop, width, bodyHeight);
+
+  // --- battlements ---------------------------------------------------------
+  const merlons = isKing ? 6 : 5;
+  const merlonW = width / (merlons * 2 - 1);
+  for (let i = 0; i < merlons; i++) {
+    // Merlons break off as the tower is destroyed, from the outside in.
+    const survival = 1 - Math.abs(i - (merlons - 1) / 2) / merlons;
+    if (health < survival * 0.7) continue;
+    ctx.fillStyle = stone;
+    ctx.fillRect(left + i * merlonW * 2, bodyTop - 14, merlonW, 16);
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fillRect(left + i * merlonW * 2, bodyTop - 2, merlonW, 3);
+  }
+
+  // --- corner turrets ------------------------------------------------------
+  // Drawn after the battlements: painted before, the merlons buried the caps
+  // and the towers read as a plain box.
+  const turretW = width * 0.22;
+  for (const tx of [left - turretW * 0.5, left + width - turretW * 0.5]) {
+    ctx.fillStyle = stone;
+    const turretRise = isKing ? 10 : 20;
+    ctx.fillRect(tx, bodyTop - turretRise, turretW, bodyHeight + turretRise);
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.fillRect(tx + turretW - 3, bodyTop - turretRise, 3, bodyHeight + turretRise);
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.fillRect(tx, bodyTop - turretRise, 3, bodyHeight + turretRise);
+
+    // Conical cap in the team colour, the clearest allegiance read at range.
+    ctx.fillStyle = entity.dormant ? '#5a606c' : colours.dark;
+    const capPeak = bodyTop - turretRise - (isKing ? 16 : 24);
+    ctx.beginPath();
+    ctx.moveTo(tx - 5, bodyTop - turretRise);
+    ctx.lineTo(tx + turretW / 2, capPeak);
+    ctx.lineTo(tx + turretW + 5, bodyTop - turretRise);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.16)';
+    ctx.beginPath();
+    ctx.moveTo(tx - 5, bodyTop - turretRise);
+    ctx.lineTo(tx + turretW / 2, capPeak);
+    ctx.lineTo(tx + turretW / 2, bodyTop - turretRise);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // --- arrow slit ----------------------------------------------------------
+  // A narrow arched window with a warm interior. The first version was a
+  // full-height black bar, which read as a chimney rather than a window.
+  const slitW = Math.max(4, width * 0.07);
+  const slitH = bodyHeight * 0.2;
+  const slitY = bodyTop + bodyHeight * 0.16;
+
+  // Recessed surround, so the opening looks cut into the masonry.
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.fillRect(screenX - slitW, slitY - 3, slitW * 2, slitH + 6);
+
+  ctx.fillStyle = 'rgba(12,14,20,0.92)';
+  ctx.beginPath();
+  ctx.moveTo(screenX - slitW / 2, slitY + slitH);
+  ctx.lineTo(screenX - slitW / 2, slitY + slitW / 2);
+  ctx.arc(screenX, slitY + slitW / 2, slitW / 2, Math.PI, 0);
+  ctx.lineTo(screenX + slitW / 2, slitY + slitH);
+  ctx.closePath();
+  ctx.fill();
+
+  // Lamplight inside, extinguished while a king tower is dormant.
+  if (!entity.dormant) {
+    ctx.fillStyle = colours.primary;
+    ctx.globalAlpha = 0.85;
+    ctx.fillRect(screenX - slitW / 2 + 1, slitY + slitH - 5, slitW - 2, 4);
+    ctx.globalAlpha = 1;
+  }
+
+  // --- banner --------------------------------------------------------------
+  if (!entity.dormant) {
+    const bannerH = bodyHeight * 0.34;
+    ctx.fillStyle = colours.primary;
+    ctx.beginPath();
+    ctx.moveTo(screenX - width * 0.16, bodyTop + bodyHeight * 0.58);
+    ctx.lineTo(screenX + width * 0.16, bodyTop + bodyHeight * 0.58);
+    ctx.lineTo(screenX + width * 0.16, bodyTop + bodyHeight * 0.58 + bannerH);
+    ctx.lineTo(screenX, bodyTop + bodyHeight * 0.58 + bannerH * 0.7);
+    ctx.lineTo(screenX - width * 0.16, bodyTop + bodyHeight * 0.58 + bannerH);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.fillRect(screenX, bodyTop + bodyHeight * 0.58, width * 0.16, bannerH * 0.9);
+  }
+
+  // --- battle damage -------------------------------------------------------
+  if (health < 0.75) {
+    ctx.strokeStyle = 'rgba(20,16,14,0.75)';
+    ctx.lineWidth = 2;
+    const cracks = health < 0.35 ? 5 : health < 0.55 ? 3 : 2;
+    for (let i = 0; i < cracks; i++) {
+      // Deterministic layout: the same tower always cracks the same way, so
+      // damage does not shimmer between frames.
+      const seed = entity.towerIndex * 31 + i * 17;
+      const sx = left + ((seed * 37) % 100) / 100 * width;
+      const sy = bodyTop + ((seed * 53) % 100) / 100 * bodyHeight;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(sx + ((seed % 2 === 0 ? 1 : -1) * width) / 7, sy + bodyHeight / 5);
+      ctx.lineTo(sx + ((seed % 3 === 0 ? -1 : 1) * width) / 10, sy + bodyHeight / 2.6);
+      ctx.stroke();
+    }
+    // Scorching around the base as it nears collapse. A gradient rather than
+    // a flat rectangle, which read as a solid overlay rather than as soot.
+    if (health < 0.35) {
+      const soot = ctx.createLinearGradient(0, bodyTop + bodyHeight * 0.45, 0, bodyTop + bodyHeight);
+      soot.addColorStop(0, 'rgba(20,16,14,0)');
+      soot.addColorStop(1, 'rgba(20,16,14,0.45)');
+      ctx.fillStyle = soot;
+      ctx.fillRect(left, bodyTop + bodyHeight * 0.45, width, bodyHeight * 0.55);
+    }
+  }
+
+  ctx.restore();
+
+  healthBar(ctx, screenX, bodyTop - (isKing ? 22 : 34), width * 1.15, health, entity.team);
 }
 
 function drawProjectile(

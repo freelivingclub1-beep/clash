@@ -172,6 +172,28 @@ treats tiles as unit squares; screen→tile hit-testing inverts through the same
 The arena is drawn from the same grid the simulation navigates, so the picture and the
 pathfinding cannot disagree about where the river is.
 
+**Surfaces are textured, not flat-filled.** `src/render/textures.ts` generates tiling
+textures procedurally — stone with mortar courses and per-block relief, grass with individual
+blades, water with caustic banding, planked wood with grain, packed dirt, brushed metal — from
+seeded value-noise fBm, rasterised once and handed out as `CanvasPattern`s. Generated rather
+than downloaded because this environment can reach no texture host (every CDN and asset site
+is blocked by the network policy) and because bundling third-party art carries a licensing
+problem regardless. Generation also costs a few kilobytes of code instead of megabytes of
+PNG, and lets any surface be re-tinted per team without exporting a variant.
+
+The static arena — turf, worn paths, river bed, banks, foam, planked bridges with rails,
+tower platforms, border and vignette — is composited once into an offscreen canvas keyed on
+the grid version, then blitted each frame. Repainting several hundred textured tiles every
+frame would cost more than the rest of the renderer combined.
+
+Crown towers are masonry keeps: a stepped plinth, corner turrets with coloured caps,
+battlements, an arched arrow slit with lamplight inside, and a banner. Damage is structural —
+merlons break away from the outside in, cracks open, soot gathers at the base — so the state
+of the board is readable from the towers themselves rather than only from the health bars.
+King towers are drawn wide and squat rather than tall: their footprint sits two tiles from
+the back of the grid, and at the princess towers' proportions the far one was sliced off by
+the top of the field.
+
 Units are composed figures — legs, torso, head, weapon, shield — rasterised once into cached
 offscreen canvases per (card, team, pose). Art resolves from a card's `spriteKey` when that
 is a URL, fetched at runtime so any card can point at hosted art without a rebuild;
