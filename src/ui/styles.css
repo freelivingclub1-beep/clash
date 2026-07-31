@@ -89,6 +89,7 @@ body {
 }
 
 .battle-hud {
+  touch-action: none;
   height: 25%;
   padding: 1.5% 2.5% 2.5%;
   background: linear-gradient(180deg, rgba(12, 15, 22, 0.75) 0%, rgba(12, 15, 22, 0.97) 22%);
@@ -190,6 +191,14 @@ body {
   overflow: hidden;
   user-select: none;
   cursor: grab;
+  /*
+   * Without this the browser claims a touch drag for scrolling and fires
+   * pointercancel instead of pointermove, so a card could be pressed but
+   * never dragged onto the board. This is the single line that made
+   * deploying work on touch at all.
+   */
+  touch-action: none;
+  -webkit-user-drag: none;
   transition:
     transform 0.09s ease,
     border-color 0.09s ease;
@@ -201,8 +210,30 @@ body {
 }
 
 .card-tile.dragging {
-  transform: translateY(-10px) scale(1.05);
+  /* The lifted card is represented by the floating copy under the pointer,
+     so the slot it came from reads as empty rather than duplicated. */
+  opacity: 0.25;
+  transform: scale(0.94);
   cursor: grabbing;
+}
+
+/* The translucent card that follows the finger while placing. */
+.drag-card {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: clamp(64px, 19vw, 130px);
+  pointer-events: none;
+  opacity: 0.82;
+  z-index: 20;
+  filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.6));
+  will-change: transform;
+}
+
+.drag-card .card-tile {
+  border-color: var(--gold);
+  box-shadow: 0 0 18px rgba(255, 216, 74, 0.5);
+  transition: none;
 }
 
 .card-tile.unaffordable {

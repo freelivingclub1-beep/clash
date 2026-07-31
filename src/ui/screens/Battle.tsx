@@ -62,6 +62,7 @@ export function Battle({ config, localTeam, opponentName, onExit }: BattleProps)
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<BattleRenderer | null>(null);
   const dragRef = useRef<{ handIndex: number } | null>(null);
+  const dragCardRef = useRef<HTMLDivElement>(null);
 
   const [hud, setHud] = useState<HudSnapshot>(EMPTY_HUD);
   const [dragging, setDragging] = useState<number | null>(null);
@@ -201,6 +202,14 @@ export function Battle({ config, localTeam, opponentName, onExit }: BattleProps)
     [localTeam, runner, tileFromEvent],
   );
 
+  /** Position the floating card directly, without re-rendering the HUD. */
+  const moveDragCard = useCallback((clientX: number, clientY: number) => {
+    const node = dragCardRef.current;
+    if (!node) return;
+    // Held above the finger so the card itself is not hidden by the hand.
+    node.style.transform = `translate3d(${clientX}px, ${clientY}px, 0) translate(-50%, -130%)`;
+  }, []);
+
   const startDrag = useCallback(
     (handIndex: number) => (event: React.PointerEvent<HTMLDivElement>) => {
       const cardId = runner.state.players[localTeam].hand[handIndex];
@@ -208,44 +217,103 @@ export function Battle({ config, localTeam, opponentName, onExit }: BattleProps)
       if (!card) return;
       if (runner.state.players[localTeam].aetherPoints < card.aetherCost * AP_PER_AETHER) return;
 
+      // Stops the browser starting a native drag or a text selection, which
+      // on desktop swallowed the gesture before pointermove ever arrived.
+      event.preventDefault();
+
+      const element = event.currentTarget;
+      const pointerId = event.pointerId;
+
+      /*
+       * Capture the pointer to this element.
+       *
+       * Without it every subsequent move and release had to be caught on
+       * window, which is fragile: the browser is free to retarget or drop
+       * those events, and on touch it did. Capture guarantees the whole
+       * gesture is delivered here even if the finger leaves the element, the
+       * canvas, or the page.
+       */
+      try {
+        element.setPointerCapture(pointerId);
+      } catch {
+        // Capture is best-effort; the window fallback below still catches it.
+      }
+
       dragRef.current = { handIndex };
       setDragging(handIndex);
       updateGhost(handIndex, event.clientX, event.clientY);
+      requestAnimationFrame(() => moveDragCard(event.clientX, event.clientY));
 
-      const onMove = (moveEvent: PointerEvent) => {
-        if (!dragRef.current) return;
-        updateGhost(dragRef.current.handIndex, moveEvent.clientX, moveEvent.clientY);
-      };
+      let settled = false;
 
-      const onUp = (upEvent: PointerEvent) => {
-        globalThis.removeEventListener('pointermove', onMove);
+      const cleanup = () => {
+        element.removeEventListener('pointermove', onMove);
+        element.removeEventListener('pointerup', onUp);
+        element.removeEventListener('pointercancel', onCancel);
         globalThis.removeEventListener('pointerup', onUp);
-        globalThis.removeEventListener('pointercancel', onUp);
-
-        const active = dragRef.current;
+        globalThis.removeEventListener('pointercancel', onCancel);
+        try {
+          element.releasePointerCapture(pointerId);
+        } catch {
+          // Already released, or never captured.
+        }
         dragRef.current = null;
         setDragging(null);
         rendererRef.current?.setDrag(null);
-        if (!active) return;
-
-        const tile = tileFromEvent(upEvent.clientX, upEvent.clientY);
-        if (!tile) return;
-        const tileX = Math.floor(tile.tx);
-        const tileY = Math.floor(tile.ty);
-        if (tileX < 0 || tileX > 17 || tileY < 0 || tileY > 31) return;
-
-        // The simulation re-validates this; an illegal drop is simply dropped.
-        const card = tryGetCard(runner.state.players[localTeam].hand[active.handIndex]);
-        runner.submitDeploy(active.handIndex, tileX, tileY);
-        audio.play('deploy');
-        if (card) rendererRef.current?.vfx.deployBurst(tileX, tileY, card.tint, localTeam);
       };
 
-      globalThis.addEventListener('pointermove', onMove);
+      function onMove(moveEvent: PointerEvent) {
+        if (!dragRef.current) return;
+        moveEvent.preventDefault();
+        updateGhost(dragRef.current.handIndex, moveEvent.clientX, moveEvent.clientY);
+        moveDragCard(moveEvent.clientX, moveEvent.clientY);
+      }
+
+      /**
+       * A cancelled gesture must never place a card.
+       *
+       * `pointercancel` was previously wired to the same handler as
+       * `pointerup`, so when a touch browser took the gesture for scrolling it
+       * fired a deploy at whatever coordinate the cancel carried — down in the
+       * card hand, far outside the arena. The drop was silently rejected, which
+       * is exactly the "I can tap the cards but nothing deploys" symptom.
+       */
+      function onCancel() {
+        if (settled) return;
+        settled = true;
+        cleanup();
+      }
+
+      function onUp(upEvent: PointerEvent) {
+        if (settled) return;
+        settled = true;
+
+        const active = dragRef.current;
+        const tile = tileFromEvent(upEvent.clientX, upEvent.clientY);
+        cleanup();
+        if (!active || !tile) return;
+
+        const tileX = Math.floor(tile.tx);
+        const tileY = Math.floor(tile.ty);
+        // Released over the HUD or off the board: treat it as putting the card
+        // back, not as a failed play.
+        if (tileX < 0 || tileX > 17 || tileY < 0 || tileY > 31) return;
+
+        const played = tryGetCard(runner.state.players[localTeam].hand[active.handIndex]);
+        runner.submitDeploy(active.handIndex, tileX, tileY);
+        audio.play('deploy');
+        if (played) rendererRef.current?.vfx.deployBurst(tileX, tileY, played.tint, localTeam);
+      }
+
+      element.addEventListener('pointermove', onMove);
+      element.addEventListener('pointerup', onUp);
+      element.addEventListener('pointercancel', onCancel);
+      // Safety net: if the card unmounts mid-drag the capture is lost with it,
+      // and without this the gesture would never finish.
       globalThis.addEventListener('pointerup', onUp);
-      globalThis.addEventListener('pointercancel', onUp);
+      globalThis.addEventListener('pointercancel', onCancel);
     },
-    [localTeam, runner, tileFromEvent, updateGhost],
+    [localTeam, runner, tileFromEvent, updateGhost, moveDragCard],
   );
 
   // --- derived HUD data ----------------------------------------------------
@@ -318,6 +386,12 @@ export function Battle({ config, localTeam, opponentName, onExit }: BattleProps)
           </div>
         </div>
       </div>
+
+      {dragging !== null && (
+        <div className="drag-card" ref={dragCardRef} aria-hidden="true">
+          <CardTile card={tryGetCard(player.hand[dragging])} />
+        </div>
+      )}
 
       {countdown > 0 && (
         <div className="countdown-overlay">
