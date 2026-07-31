@@ -112,9 +112,25 @@ export function targetAcquisition(state: MatchState): void {
       entity.tauntSourceId = NO_TARGET;
     }
 
-    if (currentTargetStillValid(state, entity, stats.loseRangeSq)) continue;
+    const current = findEntity(state, entity.targetId);
+    const marchingAtObjective =
+      !!current && current.kind === 'tower' && current.towerIndex === entity.goalTowerIndex;
+    const valid = currentTargetStillValid(state, entity, stats.loseRangeSq);
 
-    if (entity.targetId !== NO_TARGET) {
+    /*
+     * A lock on a real combatant is sticky; a lock on the objective tower is
+     * not.
+     *
+     * The objective is a fallback, not a commitment — it is simply where the
+     * unit walks when nothing is in front of it. Treating it as sticky (which
+     * the earlier stutter fix accidentally did, by exempting it from the range
+     * check and then skipping the rescan) meant a unit that had locked the
+     * tower never looked again, and walked straight past enemies within a tile
+     * of it without swinging.
+     */
+    if (valid && !marchingAtObjective) continue;
+
+    if (!valid && entity.targetId !== NO_TARGET) {
       // Losing a lock resets the wind-up: the next target must be earned.
       entity.targetId = NO_TARGET;
       entity.windupDone = false;
@@ -123,8 +139,9 @@ export function targetAcquisition(state: MatchState): void {
     // Stagger by id so the scan cost spreads across ticks instead of spiking.
     if ((state.tick + entity.id) % TARGET_REACQUIRE_INTERVAL !== 0) continue;
 
+    // Prefer a live combatant in sight; fall back to the march objective.
     const found = findBestTarget(state, entity) ?? objectiveTarget(state, entity);
-    if (found) {
+    if (found && found.id !== entity.targetId) {
       entity.targetId = found.id;
       entity.windupDone = false;
     }

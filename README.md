@@ -139,6 +139,23 @@ Zap did not kill Goblins, Arrows did not kill Archers, and Fireball killed neith
 nor Wizard. Crown Tower damage is capped at 32%, asserted in the simulation rather than only
 on paper.
 
+**Shields are a durability layer, not extra health.** A blow larger than the remaining shield
+strips it and the *entire excess is discarded* — a 1000-damage spell against 90 shield leaves
+base health untouched. That is what makes shielded units immune to single-hit burst and
+forces the counter to be multi-hit or sustained area damage; letting the overflow bleed
+through, as the first implementation did, silently removed that counterplay. Breaking a
+shield emits an event and grants a brief displacement immunity, so the blow that strips it
+does not also knock the unit out of position. Shield is a stat rather than a passive, and the
+audit weights each point of it at 1.6x a point of health because burst immunity is worth more
+than raw durability.
+
+**Charge** accumulates uninterrupted travel, doubles movement speed past the card's
+threshold, lands one doubled hit, and resets on impact. Stun, freeze and knockback break it
+outright. It is registered in the passive registry with no hooks — the mechanic modifies
+speed and outgoing damage, for which no hook exists, so `movement`, `combat` and `status`
+implement it directly and the registry entry exists so the roster test can still verify it
+is a known, priced mechanic.
+
 Passives live in `src/sim/scripts/passives.ts` — reflect, parry, chain, attack ramp,
 displacement, siege bonus, heal and slow auras, death split, death zone, enrage, crowd
 control immunity, spawn shield. Each has a price in the balance module, and a test fails if

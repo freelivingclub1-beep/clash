@@ -158,6 +158,10 @@ export const MODELS: Record<string, ModelSpec> = {
   frostPylon: model('structure', 'crest', 'staff', 'none', 0.95),
   thornWarden: model('insect', 'crest', 'spear', 'none', 0.8),
   stoneWarden: model('golem', 'helm', 'hammer', 'shield', 1.15),
+
+  // --- shielded and charging archetypes ------------------------------------
+  spearGuard: model('humanoid', 'skull', 'spear', 'shield', 0.78),
+  ironCharger: model('quadruped', 'visor', 'axe', 'shield', 1.2),
 };
 
 export function modelSpec(modelId: string, fallback: ModelSpec): ModelSpec {

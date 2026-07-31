@@ -94,12 +94,22 @@ export const SEPARATION_STRENGTH: Fx = fx(0.35);
 /** Default collision radius for a single troop, in tiles. */
 export const DEFAULT_BODY_RADIUS: Fx = fx(0.4);
 
+/** Speed and damage multipliers while a charging unit is at full tilt. */
+export const CHARGE_SPEED_MULTIPLIER: Fx = fx(2);
+export const CHARGE_DAMAGE_MULTIPLIER = 2;
+
 /** Projectile travel speed in tiles per tick. */
 export const PROJECTILE_SPEED: Fx = fxDiv(fx(9), fx(TICK_HZ));
 
 // ---------------------------------------------------------------------------
 // Deployment
 // ---------------------------------------------------------------------------
+
+/**
+ * Displacement immunity granted at the instant a shield breaks, so the blow
+ * that strips it does not also knock the unit out of position.
+ */
+export const SHIELD_BREAK_GRACE_TICKS = 6;
 
 /** Ticks between dropping a card and the troops becoming active. */
 export const DEPLOY_DELAY_TICKS = secondsToTicks(1);

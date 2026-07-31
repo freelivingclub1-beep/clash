@@ -21,6 +21,7 @@ import {
 } from './constants';
 import { type Team, type Lane, laneForX, TOWER_LAYOUTS, enemyOf } from './nav/grid';
 import { type Entity, type MatchState, NO_TARGET } from './types';
+import { SHIELD_BREAK_GRACE_TICKS } from './constants';
 import { passiveHooks } from './scripts/passives';
 
 export interface ResolvedStats {
@@ -149,6 +150,9 @@ function blankEntity(id: number, team: Team, kind: Entity['kind']): Entity {
     passiveCharges: 0,
     passiveTimer: 0,
     passiveTargetId: NO_TARGET,
+    shieldBreakTicks: 0,
+    chargeDistance: 0,
+    charging: false,
     lifetimeTicks: 0,
     towerIndex: -1,
     dormant: false,
@@ -404,15 +408,40 @@ export function applyDamage(
 ): number {
   if (!target.alive || amount <= 0) return 0;
 
-  let remaining = amount;
+  /*
+   * Shields are a separate durability layer with overkill absorption, not a
+   * pool of extra health.
+   *
+   * A blow that exceeds the remaining shield destroys the shield and the
+   * entire excess is discarded — a 1000-damage spell against 15 shield leaves
+   * base health untouched. This is the whole point of the mechanic: it makes
+   * shielded units immune to single-hit burst and forces the counter to be
+   * multi-hit or sustained area damage. Letting the excess bleed through, as
+   * this previously did, silently removed that counterplay.
+   */
   if (target.shield > 0) {
-    const absorbed = Math.min(target.shield, remaining);
+    const absorbed = Math.min(target.shield, amount);
     target.shield -= absorbed;
-    remaining -= absorbed;
-  }
-  if (remaining <= 0) return 0;
 
-  const dealt = Math.min(target.hp, remaining);
+    if (target.shield === 0) {
+      // Shield-break transition: a brief window in which the unit cannot be
+      // displaced, so the blow that strips the shield does not also knock the
+      // unit out of position.
+      target.shieldBreakTicks = SHIELD_BREAK_GRACE_TICKS;
+      target.pushX = 0;
+      target.pushY = 0;
+      state.events.push({
+        type: 'shieldBreak',
+        entityId: target.id,
+        team: target.team,
+        x: target.x,
+        y: target.y,
+      });
+    }
+    return absorbed;
+  }
+
+  const dealt = Math.min(target.hp, amount);
   target.hp -= dealt;
 
   // A king tower wakes the moment it is touched.

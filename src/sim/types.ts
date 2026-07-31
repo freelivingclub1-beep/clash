@@ -104,6 +104,16 @@ export interface Entity {
   /** Last target seen by a passive, so attack ramp can detect a switch. */
   passiveTargetId: number;
 
+  // --- shield --------------------------------------------------------------
+  /** Ticks of displacement immunity granted the instant a shield breaks. */
+  shieldBreakTicks: number;
+
+  // --- charge --------------------------------------------------------------
+  /** Uninterrupted distance travelled, in Q16.16 tiles. Resets on impact. */
+  chargeDistance: Fx;
+  /** True once `chargeDistance` passes the card's threshold. */
+  charging: boolean;
+
   // --- building ------------------------------------------------------------
   /** Ticks of life left; buildings self-destruct at 0. */
   lifetimeTicks: number;
@@ -195,6 +205,8 @@ export type SimEvent =
   | { type: 'death'; entityId: number; cardId: string; team: Team; x: Fx; y: Fx }
   | { type: 'hit'; x: Fx; y: Fx; damage: number; splash: boolean }
   | { type: 'towerDestroyed'; towerIndex: number; team: Team }
+  | { type: 'shieldBreak'; entityId: number; team: Team; x: Fx; y: Fx }
+  | { type: 'charge'; entityId: number; team: Team; x: Fx; y: Fx }
   | { type: 'ability'; team: Team; hook: string; x: Fx; y: Fx }
   | { type: 'spell'; cardId: string; team: Team; x: Fx; y: Fx; radius: Fx }
   | { type: 'deployRejected'; team: Team; reason: string };

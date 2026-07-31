@@ -12,6 +12,7 @@ import { CHAMPION_CARDS, TOWER_TROOP_CARDS } from './championsAndTowers';
 import { UNIQUE_CARDS } from './uniques';
 import { UNIQUE_CARDS_2 } from './uniques2';
 import { UNIQUE_CARDS_3 } from './uniques3';
+import { SHIELDED_CARDS } from './shielded';
 
 export const BUILTIN_CARDS = [
   ...TROOP_CARDS,
@@ -21,6 +22,7 @@ export const BUILTIN_CARDS = [
   ...UNIQUE_CARDS,
   ...UNIQUE_CARDS_2,
   ...UNIQUE_CARDS_3,
+  ...SHIELDED_CARDS,
 ];
 
 for (const card of BUILTIN_CARDS) registerCard(card);
@@ -31,6 +33,7 @@ export * from './championsAndTowers';
 export * from './uniques';
 export * from './uniques2';
 export * from './uniques3';
+export * from './shielded';
 
 /** A sensible starting deck: 8 battle cards + a tower troop. */
 export const STARTER_DECK: string[] = [

@@ -487,15 +487,29 @@ register('spawner', {
 /**
  * Terrain Walk — crosses the river without using a bridge.
  *
- * The only passive needing engine support: the movement system consults
- * `ignoresTerrain` alongside `flying` when testing walkability. Set here on
- * spawn rather than read from the card in the hot loop.
+ * The movement system consults `ignoresTerrain` alongside `flying` when
+ * testing walkability. Set here on spawn rather than read from the card in
+ * the hot loop.
  */
 register('terrain_walk', {
   onSpawn: (_state, self) => {
     self.ignoresTerrain = true;
   },
 });
+
+/**
+ * Charge — accelerates over uninterrupted distance, then doubles the next hit.
+ *
+ * Registered with no hooks on purpose. The mechanic changes movement speed and
+ * outgoing damage, and there is no hook for either: `movement` accumulates the
+ * distance and applies the speed multiplier, `combat` applies the doubled hit
+ * and clears the state, and `status` breaks it on crowd control.
+ *
+ * The entry still has to exist, because the registry is what answers "is this
+ * a known passive" — and that check is exactly what caught this being given a
+ * price before it had an implementation.
+ */
+register('charge', {});
 
 // ---------------------------------------------------------------------------
 

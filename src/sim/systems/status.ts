@@ -18,6 +18,12 @@ export function statusEffects(state: MatchState): void {
     if (!entity.alive || entity.kind === 'projectile') continue;
 
     if (entity.deployTimer > 0) entity.deployTimer--;
+    if (entity.shieldBreakTicks > 0) entity.shieldBreakTicks--;
+    // Crowd control breaks a charge outright, not merely pauses it.
+    if ((entity.stunTicks > 0 || entity.freezeTicks > 0) && entity.charging) {
+      entity.charging = false;
+      entity.chargeDistance = 0;
+    }
     if (entity.freezeTicks > 0) entity.freezeTicks--;
     if (entity.stunTicks > 0) entity.stunTicks--;
     if (entity.rageTicks > 0) entity.rageTicks--;

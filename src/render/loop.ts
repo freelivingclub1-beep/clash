@@ -32,7 +32,8 @@ export interface DragState {
   tileX: number;
   tileY: number;
   legal: boolean;
-  tint: string;
+  /** The card being placed, so the ghost can draw its actual figures. */
+  cardId: string;
   flying: boolean;
 }
 
@@ -170,8 +171,9 @@ export class BattleRenderer {
         Math.floor(this.drag.tileX),
         Math.floor(this.drag.tileY),
         this.drag.legal,
-        this.drag.tint,
+        this.drag.cardId,
         this.viewTeam,
+        this.runner.localTeam,
       );
     }
 

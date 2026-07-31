@@ -32,6 +32,10 @@ import {
   tileToLogical,
 } from './camera';
 import { texturePattern } from './textures';
+import { spriteFor } from './sprites';
+import { tryGetCard } from '@cards/registry';
+import { formationOffsets } from '@sim/entities';
+import { fxToFloat } from '@sim/math/fixed';
 
 /** Rect covering one tile, in logical space, normalised for the board flip. */
 function tileRect(tx: number, ty: number, viewTeam: Team) {
@@ -304,30 +308,84 @@ export function drawDeployOverlay(
   ctx.restore();
 }
 
-/** The translucent preview shown under the finger while dragging a card. */
+/**
+ * The placement preview: the actual troop, translucent, standing on the tile
+ * it will occupy.
+ *
+ * An earlier version floated a copy of the *card* under the finger, which was
+ * a large opaque rectangle that covered the board you were trying to read.
+ * Drawing the unit itself — at the real spawn count and formation — shows
+ * exactly what is about to appear and where, and takes up no more room than
+ * the troops will.
+ */
 export function drawPlacementGhost(
   ctx: CanvasRenderingContext2D,
   tx: number,
   ty: number,
   legal: boolean,
-  tint: string,
+  cardId: string,
   viewTeam: Team,
+  ownerTeam: Team,
 ): void {
   const centre = tileToLogical(tx + 0.5, ty + 0.5, viewTeam);
-  ctx.save();
-  ctx.globalAlpha = 0.65;
-  ctx.fillStyle = legal ? tint : '#c0392b';
-  ctx.beginPath();
-  ctx.ellipse(centre.x, centre.y, TILE_W * 0.45, TILE_H * 0.6, 0, 0, Math.PI * 2);
-  ctx.fill();
+  const card = tryGetCard(cardId);
 
-  ctx.globalAlpha = 1;
-  ctx.strokeStyle = legal ? '#ffffff' : '#ff6b5b';
+  ctx.save();
+
+  // Target ring on the ground, red when the drop would be rejected.
+  ctx.strokeStyle = legal ? 'rgba(255,255,255,0.9)' : '#ff6b5b';
   ctx.lineWidth = 4;
   ctx.setLineDash([10, 8]);
   ctx.beginPath();
-  ctx.ellipse(centre.x, centre.y, TILE_W * 0.75, TILE_H * 0.95, 0, 0, Math.PI * 2);
+  ctx.ellipse(centre.x, centre.y, TILE_W * 0.72, TILE_H * 0.9, 0, 0, Math.PI * 2);
   ctx.stroke();
   ctx.setLineDash([]);
+
+  if (!card) {
+    ctx.restore();
+    return;
+  }
+
+  // Spells have no figure to preview; show their blast radius instead, which
+  // is the thing you are actually aiming.
+  if (card.category === 'Spell') {
+    ctx.fillStyle = legal ? 'rgba(255,150,70,0.25)' : 'rgba(255,90,80,0.25)';
+    ctx.beginPath();
+    ctx.ellipse(
+      centre.x,
+      centre.y,
+      card.splashRadius * TILE_W,
+      card.splashRadius * TILE_H,
+      0,
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+    ctx.restore();
+    return;
+  }
+
+  // Every body the card will spawn, in the formation it will spawn in.
+  ctx.globalAlpha = legal ? 0.55 : 0.3;
+  const radius = card.bodyRadius * TILE_W;
+  const drawHeight = radius * 4.2;
+
+  for (const [ox, oy] of formationOffsets(card.spawnCount)) {
+    const offsetX = fxToFloat(ox);
+    const offsetY = fxToFloat(oy);
+    const at = tileToLogical(tx + 0.5 + offsetX, ty + 0.5 + offsetY, viewTeam);
+    const lift = card.isFlying ? TILE_H * 0.9 : 0;
+
+    const sprite = spriteFor(card, ownerTeam, 0);
+    const drawWidth = drawHeight * (sprite.width / sprite.height);
+
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.beginPath();
+    ctx.ellipse(at.x, at.y, radius * 0.8, radius * 0.4, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.drawImage(sprite.source, at.x - drawWidth / 2, at.y - lift - drawHeight, drawWidth, drawHeight);
+  }
+
   ctx.restore();
 }

@@ -62,7 +62,6 @@ export function Battle({ config, localTeam, opponentName, onExit }: BattleProps)
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<BattleRenderer | null>(null);
   const dragRef = useRef<{ handIndex: number } | null>(null);
-  const dragCardRef = useRef<HTMLDivElement>(null);
 
   const [hud, setHud] = useState<HudSnapshot>(EMPTY_HUD);
   const [dragging, setDragging] = useState<number | null>(null);
@@ -194,21 +193,13 @@ export function Battle({ config, localTeam, opponentName, onExit }: BattleProps)
         tileX,
         tileY,
         legal,
-        tint: card.tint,
+        cardId,
         flying: card.isFlying,
       };
       renderer.setDrag(drag);
     },
     [localTeam, runner, tileFromEvent],
   );
-
-  /** Position the floating card directly, without re-rendering the HUD. */
-  const moveDragCard = useCallback((clientX: number, clientY: number) => {
-    const node = dragCardRef.current;
-    if (!node) return;
-    // Held above the finger so the card itself is not hidden by the hand.
-    node.style.transform = `translate3d(${clientX}px, ${clientY}px, 0) translate(-50%, -130%)`;
-  }, []);
 
   const startDrag = useCallback(
     (handIndex: number) => (event: React.PointerEvent<HTMLDivElement>) => {
@@ -242,7 +233,6 @@ export function Battle({ config, localTeam, opponentName, onExit }: BattleProps)
       dragRef.current = { handIndex };
       setDragging(handIndex);
       updateGhost(handIndex, event.clientX, event.clientY);
-      requestAnimationFrame(() => moveDragCard(event.clientX, event.clientY));
 
       let settled = false;
 
@@ -266,7 +256,6 @@ export function Battle({ config, localTeam, opponentName, onExit }: BattleProps)
         if (!dragRef.current) return;
         moveEvent.preventDefault();
         updateGhost(dragRef.current.handIndex, moveEvent.clientX, moveEvent.clientY);
-        moveDragCard(moveEvent.clientX, moveEvent.clientY);
       }
 
       /**
@@ -313,7 +302,7 @@ export function Battle({ config, localTeam, opponentName, onExit }: BattleProps)
       globalThis.addEventListener('pointerup', onUp);
       globalThis.addEventListener('pointercancel', onCancel);
     },
-    [localTeam, runner, tileFromEvent, updateGhost, moveDragCard],
+    [localTeam, runner, tileFromEvent, updateGhost],
   );
 
   // --- derived HUD data ----------------------------------------------------
@@ -386,12 +375,6 @@ export function Battle({ config, localTeam, opponentName, onExit }: BattleProps)
           </div>
         </div>
       </div>
-
-      {dragging !== null && (
-        <div className="drag-card" ref={dragCardRef} aria-hidden="true">
-          <CardTile card={tryGetCard(player.hand[dragging])} />
-        </div>
-      )}
 
       {countdown > 0 && (
         <div className="countdown-overlay">

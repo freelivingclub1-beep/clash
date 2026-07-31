@@ -8,7 +8,7 @@
  */
 
 import { type Fx, fx, fxLenSq, fxMul, fxRoundToInt, FX_ONE } from '../math/fixed';
-import { TICK_HZ } from '../constants';
+import { TICK_HZ, CHARGE_DAMAGE_MULTIPLIER } from '../constants';
 import { enemyOf } from '../nav/grid';
 import {
   applyDamage,
@@ -55,9 +55,14 @@ export function applyStatus(card: CardDefinition, victim: Entity, ticks: number)
       }
       break;
     case 'Knockback':
-      if (!isStructure) {
+      // Displacement immunity right after a shield breaks, so stripping the
+      // shield does not also shove the unit out of position.
+      if (!isStructure && victim.shieldBreakTicks <= 0) {
         const away = victim.team === 0 ? -FX_ONE : FX_ONE;
         victim.pushY += fxMul(away, fx(card.statusMagnitude));
+        // Being displaced interrupts a charge, per the charge reset rules.
+        victim.charging = false;
+        victim.chargeDistance = 0;
       }
       break;
     case 'Poison':
@@ -123,12 +128,26 @@ export function applyDamageAtPoint(
   }
 
   const radiusSq = Math.round((radius * radius) / FX_ONE);
+  // A cone strikes a forward half-plane rather than a full circle. Previously
+  // ConeSplash was handled identically to AreaSplash, so the damage type
+  // existed on cards and in the Card Maker but changed nothing in play.
+  const isCone = card.damageType === 'ConeSplash';
+  const faceX = attacker?.faceX ?? 0;
+  const faceY = attacker?.faceY ?? 0;
+  const hasFacing = isCone && (faceX !== 0 || faceY !== 0);
+
   for (const entity of state.entities) {
     if (entity.team !== foe || !isTargetable(entity)) continue;
     // Splash respects the attacker's target filter: a ground-only splash
     // attack must not clip flying units caught in the blast.
     if (!canTarget(card.targetPriority, entity) && entity.id !== primaryId) continue;
     if (fxLenSq(entity.x - x, entity.y - y) > radiusSq) continue;
+    if (hasFacing && entity.id !== primaryId) {
+      // Dot product against the attacker's facing: negative means behind it.
+      const toX = entity.x - (attacker as Entity).x;
+      const toY = entity.y - (attacker as Entity).y;
+      if (toX * faceX + toY * faceY < 0) continue;
+    }
     applyDamage(state, entity, damageAgainst(entity, damage, card), attacker);
     if (card.onHitStatus !== 'None') applyStatus(card, entity, statusTicks);
     // The passive fires once, on the intended target, not once per unit caught
@@ -190,12 +209,22 @@ export function combat(state: MatchState): void {
 
     const hooks = entity.evolved ? evolutionHooks(card.evoBehaviorScriptId) : undefined;
 
+    // A charging unit lands one doubled hit, then drops straight back to a
+    // walk. The reset happens here rather than in movement because impact is
+    // what ends a charge, and movement cannot see an attack landing.
+    let damage = stats.damage;
+    if (entity.charging) {
+      damage *= CHARGE_DAMAGE_MULTIPLIER;
+      entity.charging = false;
+      entity.chargeDistance = 0;
+    }
+
     if (card.usesProjectile) {
       fireProjectileFrom(
         state,
         entity,
         target,
-        stats.damage,
+        damage,
         stats.splashRadius,
         card.onHitStatus !== 'None',
       );
@@ -206,7 +235,7 @@ export function combat(state: MatchState): void {
         target.x,
         target.y,
         stats.splashRadius,
-        stats.damage,
+        damage,
         card,
         stats.statusTicks,
         target.id,

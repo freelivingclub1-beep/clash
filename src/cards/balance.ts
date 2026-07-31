@@ -221,6 +221,8 @@ export const PASSIVE_EPP_COST: Record<string, number> = {
   blink_strike: 200,
   /** Walks over the river, ignoring bridges entirely. */
   terrain_walk: 260,
+  /** Accelerates over uninterrupted distance, then lands a doubled hit. */
+  charge: 300,
 };
 
 export type PassiveId = keyof typeof PASSIVE_EPP_COST;
@@ -382,6 +384,16 @@ export interface BalanceAudit {
 }
 
 /**
+ * A point of shield is worth more than a point of health.
+ *
+ * Shields absorb overkill: a single hit of any size costs exactly the shield
+ * and nothing more, which makes shielded units immune to burst damage in a way
+ * no amount of raw health achieves. Counting shield 1:1 with health let a card
+ * buy that immunity at face value, so the audit weights it.
+ */
+export const SHIELD_EPP_WEIGHT = 1.6;
+
+/**
  * Cards are hand-tuned, so an exact match is neither achievable nor desirable.
  * This is the band inside which a card counts as balanced.
  */
@@ -408,7 +420,7 @@ export function auditCard(card: CardDefinition): BalanceAudit {
   const budget = computeBudget(budgetInputFor(card));
   const notes: string[] = [];
 
-  const actualHealthPerUnit = card.baseHealth + card.shieldHealth;
+  const actualHealthPerUnit = card.baseHealth + Math.round(card.shieldHealth * SHIELD_EPP_WEIGHT);
   const actualDpsPerUnit = card.hitSpeed > 0 ? card.damage / card.hitSpeed : 0;
 
   const units = Math.max(1, card.spawnCount);

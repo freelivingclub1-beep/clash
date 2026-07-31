@@ -24,7 +24,7 @@ import {
   fxFloorToInt,
   FX_ONE,
 } from '../math/fixed';
-import { GRID_W, GRID_H, SEPARATION_STRENGTH } from '../constants';
+import { GRID_W, GRID_H, SEPARATION_STRENGTH, CHARGE_SPEED_MULTIPLIER } from '../constants';
 import { TOWER_LAYOUTS, isWalkable } from '../nav/grid';
 import { flowDirection, rectCells } from '../nav/flowfield';
 import { findEntity, isTargetable, resolveStats } from '../entities';
@@ -43,13 +43,45 @@ export function tileOf(value: Fx): number {
   return fxFloorToInt(value);
 }
 
-/** Effective speed after rage, slow, and hard stops. */
+/** Effective speed after rage, slow, charge, and hard stops. */
 function effectiveSpeed(entity: Entity): Fx {
   if (entity.freezeTicks > 0 || entity.stunTicks > 0) return 0;
   let speed = entity.speed;
   if (entity.rageTicks > 0) speed = fxMul(speed, RAGE_SPEED_BONUS);
   if (entity.slowTicks > 0) speed = fxMul(speed, entity.slowFactor);
+  if (entity.charging) speed = fxMul(speed, CHARGE_SPEED_MULTIPLIER);
   return speed;
+}
+
+/**
+ * Track uninterrupted travel and enter the charge state at the threshold.
+ *
+ * "Uninterrupted" is the important word: the accumulator resets the moment the
+ * unit stops moving, which covers being blocked, being stunned, and stopping
+ * to attack, without needing to inspect any of those states individually.
+ */
+function updateCharge(state: MatchState, entity: Entity, moved: Fx): void {
+  const stats = resolveStats(entity.cardId, entity.level, entity.evolved);
+  const threshold = stats.card.passiveId === 'charge' ? stats.card.passiveMagnitude : 0;
+  if (threshold <= 0) return;
+
+  if (moved <= 0 || entity.stunTicks > 0 || entity.freezeTicks > 0) {
+    entity.chargeDistance = 0;
+    entity.charging = false;
+    return;
+  }
+
+  entity.chargeDistance += moved;
+  if (!entity.charging && entity.chargeDistance >= fx(threshold)) {
+    entity.charging = true;
+    state.events.push({
+      type: 'charge',
+      entityId: entity.id,
+      team: entity.team,
+      x: entity.x,
+      y: entity.y,
+    });
+  }
 }
 
 function goalCellsFor(towerIndex: number): number[] {
@@ -258,7 +290,11 @@ export function movement(state: MatchState): void {
       }
     }
 
+    const movedX = nextX - entity.x;
+    const movedY = nextY - entity.y;
     entity.x = nextX;
     entity.y = nextY;
+
+    updateCharge(state, entity, fxLen(movedX, movedY));
   }
 }
