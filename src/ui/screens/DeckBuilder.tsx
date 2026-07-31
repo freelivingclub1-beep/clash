@@ -16,11 +16,13 @@ import { collectionEntry } from '@game/profile/schema';
 
 export interface DeckBuilderProps {
   profile: PlayerProfile;
-  onSave: (deck: string[]) => void;
+  /** Called on every change. There is no save step — edits persist as made. */
+  onChange: (deck: string[]) => void;
+  onDone: () => void;
   onBack: () => void;
 }
 
-export function DeckBuilder({ profile, onSave, onBack }: DeckBuilderProps) {
+export function DeckBuilder({ profile, onChange, onDone, onBack }: DeckBuilderProps) {
   const [deck, setDeck] = useState<string[]>([...profile.deck]);
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
 
@@ -43,6 +45,9 @@ export function DeckBuilder({ profile, onSave, onBack }: DeckBuilderProps) {
         next[existing] = next[selectedSlot];
       }
       next[selectedSlot] = cardId;
+      // Persisted immediately: a deck half-edited when the app is closed
+      // should come back exactly as it was left.
+      onChange(next);
       return next;
     });
     setSelectedSlot(null);
@@ -129,12 +134,12 @@ export function DeckBuilder({ profile, onSave, onBack }: DeckBuilderProps) {
         )}
 
         <div className="row">
-          <button className="button" disabled={!validation.ok} onClick={() => onSave(deck)}>
-            Save Deck
+          <button className="button" onClick={onDone}>
+            Done
           </button>
-          <button className="button secondary" onClick={() => setDeck([...profile.deck])}>
-            Revert
-          </button>
+          <span className="muted">
+            {validation.ok ? 'Deck saved automatically.' : 'Fix the issues above to battle.'}
+          </span>
         </div>
       </div>
     </div>

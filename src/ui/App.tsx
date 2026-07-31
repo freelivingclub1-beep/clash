@@ -14,6 +14,8 @@ import {
   LocalStorageProfileRepository,
   applyMatchResult,
 } from '@game/profile/repository';
+import { ProfileStore } from '@game/profile/store';
+import { audio } from '@render/audio';
 import { cardLevelMap, type PlayerProfile } from '@game/profile/schema';
 import { validateDeck } from '@game/deck';
 import type { MatchConfig } from '@sim/state';
@@ -30,6 +32,13 @@ type Screen =
 const repository = new LocalStorageProfileRepository();
 
 /**
+ * One store for the whole app. Every mutation goes through it and is written
+ * back automatically — there is no "save" action anywhere in the UI, and
+ * closing the tab mid-edit loses nothing.
+ */
+const store = new ProfileStore(repository);
+
+/**
  * Match seeds come from the clock. This is the one place a non-deterministic
  * value is allowed in: it is captured once, before the match starts, and from
  * then on the entire simulation is a pure function of it.
@@ -42,12 +51,20 @@ export function App() {
   const [searching, setSearching] = useState(false);
 
   useEffect(() => {
-    void repository.load().then(setProfile);
+    const unsubscribe = store.subscribe(setProfile);
+    void store.load();
+    return unsubscribe;
   }, []);
 
-  const persist = useCallback(async (next: PlayerProfile) => {
-    setProfile({ ...next });
-    await repository.save(next);
+  // Apply the persisted sound settings once the profile is available.
+  useEffect(() => {
+    if (!profile) return;
+    audio.setEnabled(profile.settings.soundEnabled);
+    audio.setVolume(profile.settings.volume);
+  }, [profile?.settings.soundEnabled, profile?.settings.volume]);
+
+  const persist = useCallback((mutate: (draft: PlayerProfile) => PlayerProfile | void) => {
+    store.update(mutate);
   }, []);
 
   const findMatch = useCallback(async () => {
@@ -90,7 +107,11 @@ export function App() {
           opponentName={screen.opponent.name}
           onExit={(outcome, summary) => {
             if (outcome !== 'ongoing') {
-              void persist(applyMatchResult({ ...profile }, outcome, 0, summary));
+              persist((draft) => applyMatchResult(draft, outcome, 0, summary));
+              // Results are worth a synchronous write rather than waiting on
+              // the debounce: this is the moment a player is most likely to
+              // close the app.
+              void store.flush();
             }
             setScreen({ name: 'home' });
           }}
@@ -113,10 +134,8 @@ export function App() {
         <DeckBuilder
           profile={profile}
           onBack={() => setScreen({ name: 'home' })}
-          onSave={(deck) => {
-            void persist({ ...profile, deck });
-            setScreen({ name: 'home' });
-          }}
+          onChange={(deck) => persist((draft) => void (draft.deck = deck))}
+          onDone={() => setScreen({ name: 'home' })}
         />
       </div>
     );
@@ -156,6 +175,34 @@ export function App() {
               <span className="label">Deck average aether</span>
               <span>{deckValidation.averageAether}</span>
             </div>
+          </div>
+
+          <div className="panel">
+            <div className="stat-line">
+              <span className="label">Gold</span>
+              <span>{profile.wallet.gold}</span>
+            </div>
+            <div className="stat-line">
+              <span className="label">Gems</span>
+              <span>{profile.wallet.gems}</span>
+            </div>
+            <div className="stat-line">
+              <span className="label">Evolution shards</span>
+              <span>{profile.wallet.evolutionShards}</span>
+            </div>
+            <label className="toggle" style={{ marginTop: 8 }}>
+              <input
+                type="checkbox"
+                checked={profile.settings.soundEnabled}
+                onChange={(e) =>
+                  persist((draft) => {
+                    draft.settings = { ...draft.settings, soundEnabled: e.target.checked };
+                  })
+                }
+              />
+              Sound
+            </label>
+            <div className="muted">Progress saves automatically.</div>
           </div>
 
           {!deckValidation.ok && (
@@ -212,7 +259,7 @@ export function App() {
 
           <button
             className="button danger"
-            onClick={() => void repository.reset().then(setProfile)}
+            onClick={() => void store.reset()}
           >
             Reset Progress
           </button>

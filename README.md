@@ -216,7 +216,28 @@ others.
 
 ## Persistence
 
-`PlayerProfile` now carries a capped battle log — outcome, crowns, opponent, trophy delta,
+**Nothing in the UI has a save button.** Every mutation goes through `ProfileStore.update`,
+which applies the change, publishes it to subscribers, and schedules a write. Three things
+make that dependable rather than merely frequent:
+
+- **Debounced writes.** Rearranging a deck fires many mutations a second; serialising the
+  profile each time would jank the UI. They coalesce into one write, capped so a continuous
+  stream cannot defer the save indefinitely.
+- **Flush on the lifecycle events that actually fire.** `pagehide`, `freeze` and a hidden
+  `visibilitychange` — not `beforeunload`, which mobile browsers routinely skip when killing
+  a backgrounded tab. That skipped case *is* the "tapped out" case.
+- **Migration and salvage instead of reset.** The previous behaviour discarded any stored
+  profile that failed to parse. For a save file that is the only record of a player's
+  progression, adding one schema field would have silently deleted every trophy, card level
+  and gem. Now a stored profile declares its `schemaVersion` and is upgraded step by step;
+  if it still does not validate, each field is recovered *individually*, so a malformed
+  `collection` costs the collection and not the trophies. Only bytes that are not valid JSON
+  start over.
+
+Match results also pay out gold, gems and evolution shards. Without rewards the wallet never
+changed, which would have made "your gems are saved" true and meaningless.
+
+`PlayerProfile` also carries a capped battle log — outcome, crowns, opponent, trophy delta,
 duration, cards played and tower damage — shown on the home screen. Draws are logged too;
 a history that silently omitted them would not reconcile with the win/loss counts.
 

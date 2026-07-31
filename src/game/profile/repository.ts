@@ -21,6 +21,7 @@ import {
   MAX_BATTLE_LOG,
   MAX_EVOLUTION_SHARDS,
 } from './schema';
+import { migrateProfile } from './migrate';
 
 export interface ProfileRepository {
   load(): Promise<PlayerProfile>;
@@ -60,19 +61,37 @@ export function createDefaultProfile(userId = 'local-player'): PlayerProfile {
 export class LocalStorageProfileRepository implements ProfileRepository {
   constructor(private readonly storage: Storage | undefined = globalThis.localStorage) {}
 
+  /** Set when the last load had to repair the stored document. */
+  lastMigration: { migratedFrom: number | null; salvaged: boolean; lostFields: string[] } | null =
+    null;
+
   async load(): Promise<PlayerProfile> {
     const raw = this.storage?.getItem(STORAGE_KEY);
     if (!raw) return this.reset();
 
+    let parsedJson: unknown;
     try {
-      const parsed = playerProfileSchema.safeParse(JSON.parse(raw));
-      // A stored profile from an older build is discarded rather than patched:
-      // silently half-migrating a save is worse than starting clean.
-      if (!parsed.success) return this.reset();
-      return this.reconcile(parsed.data);
+      parsedJson = JSON.parse(raw);
     } catch {
+      // Genuinely unreadable bytes are the only case that starts over.
       return this.reset();
     }
+
+    // Migrate and salvage rather than discard. A save file is the only record
+    // of a player's progression; throwing it away because a field was added
+    // in a later build is not an acceptable failure mode.
+    const result = migrateProfile(parsedJson, createDefaultProfile());
+    this.lastMigration = {
+      migratedFrom: result.migratedFrom,
+      salvaged: result.salvaged,
+      lostFields: result.lostFields,
+    };
+
+    const reconciled = this.reconcile(result.profile);
+    // Write the upgraded document straight back, so the repair happens once
+    // rather than on every load.
+    if (result.migratedFrom !== null || result.salvaged) await this.save(reconciled);
+    return reconciled;
   }
 
   async save(profile: PlayerProfile): Promise<void> {
@@ -135,6 +154,20 @@ export interface MatchSummary {
   towerDamageDealt: number;
 }
 
+/** Gold, gems and shards a result awards. Surfaced by the summary screen. */
+export interface MatchRewards {
+  gold: number;
+  gems: number;
+  evolutionShards: number;
+}
+
+export function rewardsFor(outcome: 'blue' | 'red' | 'draw', localTeam: 0 | 1, winsAfter: number): MatchRewards {
+  const won = (outcome === 'blue' && localTeam === 0) || (outcome === 'red' && localTeam === 1);
+  if (outcome === 'draw') return { gold: 12, gems: 0, evolutionShards: 0 };
+  if (!won) return { gold: 10, gems: 0, evolutionShards: 0 };
+  return { gold: 40, gems: winsAfter % 3 === 0 ? 1 : 0, evolutionShards: 1 };
+}
+
 /**
  * Apply a match result to a profile: trophies, record, and the battle log.
  *
@@ -155,6 +188,17 @@ export function applyMatchResult(
     profile.currentArena = arenaForTrophies(profile.trophies);
     if (localWon) profile.wins++;
     else profile.losses++;
+  }
+
+  // Rewards. Without these the wallet never changes, so "your gems are saved"
+  // would be technically true and practically meaningless.
+  const goldReward = outcome === 'draw' ? 12 : localWon ? 40 : 10;
+  profile.wallet.gold += goldReward;
+  if (localWon) {
+    profile.wallet.evolutionShards += 1;
+    // A gem every third win, so the premium currency trickles rather than
+    // inflating — it is the one balance that should feel slow.
+    if (profile.wins % 3 === 0) profile.wallet.gems += 1;
   }
 
   const entry: BattleLogEntry = {

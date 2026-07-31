@@ -51,8 +51,24 @@ export const battleLogEntrySchema = z.object({
 
 export const MAX_BATTLE_LOG = 20;
 
+/**
+ * Bumped whenever the stored shape changes. `migrateProfile` upgrades older
+ * documents step by step rather than discarding them.
+ */
+export const CURRENT_SCHEMA_VERSION = 2;
+
+/** Player settings, persisted so sound choices survive a reload. */
+export const settingsSchema = z.object({
+  soundEnabled: z.boolean().default(true),
+  volume: z.number().min(0).max(1).default(0.7),
+});
+
 export const playerProfileSchema = z.object({
-  schemaVersion: z.literal(1).default(1),
+  /**
+   * A plain number, not a literal. Pinning it to a literal meant every save
+   * written by an older build failed validation outright and was wiped.
+   */
+  schemaVersion: z.number().int().min(1).default(CURRENT_SCHEMA_VERSION),
 
   // --- account core --------------------------------------------------------
   userId: z.string().min(1),
@@ -74,9 +90,13 @@ export const playerProfileSchema = z.object({
   wins: z.number().int().min(0).default(0),
   losses: z.number().int().min(0).default(0),
   battleLog: z.array(battleLogEntrySchema).max(MAX_BATTLE_LOG).default([]),
+
+  // --- settings ------------------------------------------------------------
+  settings: settingsSchema.default({}),
 });
 
 export type BattleLogEntry = z.infer<typeof battleLogEntrySchema>;
+export type Settings = z.infer<typeof settingsSchema>;
 
 export type Wallet = z.infer<typeof walletSchema>;
 export type CollectionEntry = z.infer<typeof collectionEntrySchema>;
