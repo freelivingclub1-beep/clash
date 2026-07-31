@@ -165,6 +165,21 @@ export const MODELS: Record<string, ModelSpec> = {
   // Small and plated: the visor and shield read as the armour a single hit
   // strips, and the claws as the bite that keeps getting worse.
   eliteHound: model('quadruped', 'visor', 'claws', 'shield', 0.68),
+
+  // --- role wave: near-variants and new archetypes --------------------------
+  sewerRat: model('quadruped', 'none', 'dagger', 'none', 0.5),
+  pikeSentry: model('humanoid', 'helm', 'spear', 'cape', 0.9),
+  hedgeKnight: model('humanoid', 'crown', 'axe', 'cape', 0.95),
+  kiteRunner: model('humanoid', 'beak', 'bow', 'cape', 0.8),
+  warhornHerald: model('humanoid', 'crest', 'lantern', 'banner', 0.9),
+  bellTower: model('structure', 'crown', 'none', 'banner', 1.0),
+  skySkiff: model('cart', 'hood', 'bomb', 'wings', 1.0),
+  ramRunner: model('brute', 'horned', 'hammer', 'backpack', 1.15),
+  sapper: model('humanoid', 'mask', 'bomb', 'backpack', 0.72),
+  culverin: model('mech', 'none', 'cannon', 'backpack', 1.05),
+  thornmail: model('golem', 'visor', 'sword', 'shield', 1.1),
+  headsman: model('brute', 'hood', 'scythe', 'none', 1.05),
+  duelist: model('humanoid', 'mask', 'dagger', 'banner', 0.9),
 };
 
 export function modelSpec(modelId: string, fallback: ModelSpec): ModelSpec {

@@ -228,7 +228,24 @@ export function spawnTroop(
 
   if (card.isHero) state.players[team].heroEntityId = entity.id;
 
-  return push(state, entity);
+  push(state, entity);
+
+  /*
+   * Spawn hooks fire here, not at the deploy site.
+   *
+   * They used to live in `resolveCommands`, which meant only *hand-played*
+   * units ever got them. Anything the simulation itself put on the board —
+   * a spawner building's output, a death split, a replicated copy — silently
+   * skipped its own passive's setup, so a shielded card produced by a spawner
+   * arrived with no shield and a parry card with no parry.
+   *
+   * The import is circular by design: `passives` needs `spawnTroop` and this
+   * needs the registry. Nothing is touched at module-init time on either side,
+   * so the cycle resolves through live bindings at call time.
+   */
+  passiveHooks(card.passiveId)?.onSpawn?.(state, entity, card.passiveMagnitude);
+
+  return entity;
 }
 
 export function spawnTower(

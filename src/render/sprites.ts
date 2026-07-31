@@ -850,6 +850,7 @@ export function spriteFor(card: CardDefinition, team: Team, phase: number): Draw
 export function clearSpriteCache(): void {
   generatedCache.clear();
   imageCache.clear();
+  portraitCache.clear();
 }
 
 /** A standalone portrait for the deck builder and Card Maker preview. */
@@ -857,4 +858,35 @@ export function portraitFor(card: CardDefinition, team: Team = 0): HTMLCanvasEle
   const { canvas, ctx } = makeCell();
   drawFigure(ctx, { phase: 0, team, tint: card.tint, spec: modelFor(card), isHero: card.isHero });
   return canvas;
+}
+
+const portraitCache = new Map<string, string>();
+
+/**
+ * The card's figure as a data URL, for use as ordinary card art in the DOM.
+ *
+ * Card faces were a flat tint and a name, so nothing in the hand, the deck
+ * builder or the collection told you what a card actually puts on the board —
+ * you had to play it to find out. The figures already existed; they were only
+ * ever drawn into the arena canvas.
+ *
+ * A data URL rather than a live canvas because card faces are rendered by
+ * React in dozens of places at once, and an `<img>` costs nothing to mount,
+ * unmount and re-mount. Rasterising is the expensive half, so it happens once
+ * per card and is cached for the session.
+ */
+export function portraitDataUrl(card: CardDefinition, team: Team = 0): string {
+  const key = `${card.id}|${team}`;
+  const cached = portraitCache.get(key);
+  if (cached !== undefined) return cached;
+
+  let url = '';
+  try {
+    url = portraitFor(card, team).toDataURL();
+  } catch {
+    // No canvas (a test environment, or a tainted context). Card faces fall
+    // back to their tint, which is what they looked like before.
+  }
+  portraitCache.set(key, url);
+  return url;
 }

@@ -24,7 +24,6 @@ import {
 import { canAfford, cycleHand, spendAether, tileCenter } from '../state';
 import { runAbility } from '../scripts/abilities';
 import { evolutionHooks } from '../scripts/evolutions';
-import { passiveHooks } from '../scripts/passives';
 import { type Command, type MatchState, type PlayerState, NO_TARGET } from '../types';
 
 function reject(state: MatchState, player: PlayerState, reason: string): void {
@@ -132,7 +131,6 @@ function resolveDeploy(
   }
 
   const hooks = evolved ? evolutionHooks(card.evoBehaviorScriptId) : undefined;
-  const passive = passiveHooks(card.passiveId);
   for (const [ox, oy] of formationOffsets(card.spawnCount)) {
     const entity = spawnTroop(
       state,
@@ -144,9 +142,10 @@ function resolveDeploy(
       center.y + oy + spawnJitter(state.simRng),
     );
     entity.goalTowerIndex = objectiveTowerIndex(state, command.team, entity.lane);
-    // Passive first, then the evolution hook: an evolved card should be able
-    // to stack its evolution shield on top of a passive one, not replace it.
-    passive?.onSpawn?.(state, entity, card.passiveMagnitude);
+    // The passive's own spawn hook already fired inside `spawnTroop`, for
+    // every spawn source rather than only this one. The evolution hook runs
+    // after it, so an evolved card stacks its shield on top of a passive one
+    // rather than replacing it.
     hooks?.onSpawn?.(state, entity);
   }
 }

@@ -35,6 +35,7 @@ import {
   MatchTimer,
   NextCard,
 } from '../battle/Hud';
+import { DragPortrait } from '../CardFace';
 
 export interface BattleProps {
   config: MatchConfig;
@@ -65,6 +66,10 @@ export function Battle({ config, localTeam, opponentName, onExit }: BattleProps)
 
   const [hud, setHud] = useState<HudSnapshot>(EMPTY_HUD);
   const [dragging, setDragging] = useState<number | null>(null);
+  // Pointer position for the drag portrait. Held in state rather than on a
+  // ref because it is what the portrait renders from, and it changes every
+  // pointermove — the arena ghost is updated imperatively on the canvas.
+  const [dragPoint, setDragPoint] = useState<{ x: number; y: number } | null>(null);
   const [countdown, setCountdown] = useState(3);
 
   // The runner outlives renders; building it once keeps the match from being
@@ -232,6 +237,7 @@ export function Battle({ config, localTeam, opponentName, onExit }: BattleProps)
 
       dragRef.current = { handIndex };
       setDragging(handIndex);
+      setDragPoint({ x: event.clientX, y: event.clientY });
       updateGhost(handIndex, event.clientX, event.clientY);
 
       let settled = false;
@@ -249,12 +255,14 @@ export function Battle({ config, localTeam, opponentName, onExit }: BattleProps)
         }
         dragRef.current = null;
         setDragging(null);
+        setDragPoint(null);
         rendererRef.current?.setDrag(null);
       };
 
       function onMove(moveEvent: PointerEvent) {
         if (!dragRef.current) return;
         moveEvent.preventDefault();
+        setDragPoint({ x: moveEvent.clientX, y: moveEvent.clientY });
         updateGhost(dragRef.current.handIndex, moveEvent.clientX, moveEvent.clientY);
       }
 
@@ -308,6 +316,7 @@ export function Battle({ config, localTeam, opponentName, onExit }: BattleProps)
   // --- derived HUD data ----------------------------------------------------
 
   const player = runner.state.players[localTeam];
+  const draggedCard = dragging === null ? undefined : tryGetCard(player.hand[dragging]);
   const multiplier = aetherMultiplierAtTick(hud.tick);
   const finished = hud.outcome !== 'ongoing';
   const localWon =
@@ -375,6 +384,10 @@ export function Battle({ config, localTeam, opponentName, onExit }: BattleProps)
           </div>
         </div>
       </div>
+
+      {draggedCard && dragPoint && (
+        <DragPortrait card={draggedCard} x={dragPoint.x} y={dragPoint.y} />
+      )}
 
       {countdown > 0 && (
         <div className="countdown-overlay">

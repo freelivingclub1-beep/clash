@@ -9,6 +9,7 @@
 
 import { type CardDefinition } from '@cards/schema';
 import { tryGetCard } from '@cards/registry';
+import { CardFace } from '../CardFace';
 import { AP_PER_AETHER, MAX_AETHER_POINTS, TICK_HZ } from '@sim/constants';
 import { REGULATION_END_TICK, MATCH_END_TICK } from '@sim/constants';
 
@@ -109,9 +110,7 @@ export function CardTile({
 
   return (
     <div className={className} onPointerDown={onPointerDown}>
-      <div className="card-art" style={{ background: card.tint }}>
-        {card.name}
-      </div>
+      <CardFace card={card} />
       {evolutionReady && <span className="evo-badge">EVO</span>}
       <span className="card-cost">{card.aetherCost}</span>
     </div>

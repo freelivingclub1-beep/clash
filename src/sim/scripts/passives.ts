@@ -90,6 +90,61 @@ register('reflect_ranged', {
 });
 
 /**
+ * Thornmail — the melee twin of Reflect Shield.
+ *
+ * Same shape, opposite scope, and that is the point: the two cards that carry
+ * these are a real choice rather than a strictly-better pair. One punishes the
+ * shooter behind the push, the other punishes the tank in front of it, and
+ * neither does anything at all against the other's prey.
+ *
+ * The reflected blow deliberately cannot chain: it is dealt with no attacker,
+ * so a Thornmail hit by another Thornmail does not start a rally.
+ */
+register('reflect_melee', {
+  onDamaged: (state, self, attacker, amount, magnitude) => {
+    if (!attacker || !attacker.alive || attacker.team === self.team) return;
+    const attackerStats = resolveStats(attacker.cardId, attacker.level, attacker.evolved);
+    if (attackerStats.card.usesProjectile) return;
+    applyDamage(state, attacker, Math.round(amount * magnitude));
+  },
+});
+
+/**
+ * Executioner — extra damage against anything already below half health.
+ *
+ * A timing card rather than a stat card. Played on a fresh push it is an
+ * ordinary melee body; played a beat later, after your tower has chipped the
+ * front line, it deletes what is left. The counterplay is equally concrete —
+ * pull it onto something at full health and the bonus never fires.
+ */
+register('execute_low_hp', {
+  onHit: (state, self, victim, magnitude) => {
+    if (victim.hp * 2 > victim.maxHp) return;
+    const stats = resolveStats(self.cardId, self.level, self.evolved);
+    applyDamage(state, victim, Math.round(stats.damage * magnitude), self, { passives: false });
+  },
+});
+
+/**
+ * First Strike — the opening blow on each new victim is the heavy one.
+ *
+ * The exact inverse of `damage_ramp`, and built that way on purpose: one card
+ * wants to stay on a single target for as long as it can, the other wants to
+ * be pulled off constantly. A lone tank blanks First Strike completely; a wide
+ * swarm blanks the ramp. Which of those your opponent plays is the whole read.
+ *
+ * `passiveTargetId` holds the victim the bonus has already been spent on.
+ */
+register('first_strike', {
+  onHit: (state, self, victim, magnitude) => {
+    if (self.passiveTargetId === victim.id) return;
+    self.passiveTargetId = victim.id;
+    const stats = resolveStats(self.cardId, self.level, self.evolved);
+    applyDamage(state, victim, Math.round(stats.damage * magnitude), self, { passives: false });
+  },
+});
+
+/**
  * Parry — the next melee hit is negated entirely and answered with double
  * damage, then the parry goes on a short cooldown.
  *

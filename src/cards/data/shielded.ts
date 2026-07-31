@@ -135,18 +135,19 @@ export const ELITE_HOUNDS = defineCard({
   passiveId: 'damage_ramp',
   /*
    * Per-stack growth coefficient. A full ten-stack channel takes ~7.4 seconds
-   * on one target and multiplies the bite about 4.6x — 45 damage climbing to
-   * roughly 210.
+   * on one target and multiplies the bite about 6.5x — 45 damage climbing to
+   * roughly 290.
    *
    * Tuned against the tower clock, not the EPP audit, which cannot see the
-   * ramp at all. At 0.5 the pack solo-killed an undefended princess tower in
-   * nine seconds while the Iron Charger and Hog Rider both died to the same
-   * tower without finishing it; a four-cost that wins a lane unassisted is not
-   * a card, it is a format. At 0.28 it leaves the tower around 30%, which sits
-   * just ahead of those peers — right, given the pack cannot touch air and
-   * breaks off for any ground defender.
+   * ramp at all. This was first set from a two-card comparison — the Iron
+   * Charger and the Hog Rider both die to an undefended princess tower without
+   * finishing it, so a pack that killed one looked alarming. Measured against
+   * the whole roster instead, that comparison was simply the wrong pair: Mini
+   * PEKKA takes the same tower in under seven seconds and Thorn Wardens in
+   * under six, both for the same four aether. The value here puts the pack in
+   * that band rather than well below it.
    */
-  passiveMagnitude: 0.28,
+  passiveMagnitude: 0.42,
 });
 
 export const SHIELDED_CARDS = [SPEAR_GUARDS, IRON_CHARGER, ELITE_HOUNDS];

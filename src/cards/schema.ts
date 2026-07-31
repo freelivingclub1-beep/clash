@@ -93,6 +93,15 @@ const identitySchema = z.object({
    * never appear in the deck builder or collection.
    */
   selectable: z.boolean().default(true),
+  /**
+   * Deck role, for grouping in the collection.
+   *
+   * Empty means "derive it" — see `@cards/roles`, which reads the role off the
+   * stat line and gets it right for nearly every card. Set it only when a
+   * card's intent disagrees with its numbers: a heavy splash defender reads as
+   * a tank by health alone, but you slot it as one of your melee answers.
+   */
+  role: z.string().default(''),
 });
 
 /** B — asset & render configuration. */

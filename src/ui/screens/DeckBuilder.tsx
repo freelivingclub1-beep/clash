@@ -13,6 +13,8 @@ import { selectableCards, tryGetCard } from '@cards/registry';
 import { DECK_LAYOUT, validateDeck } from '@game/deck';
 import type { PlayerProfile } from '@game/profile/schema';
 import { collectionEntry } from '@game/profile/schema';
+import { groupByRole, ROLE_BLURBS } from '@cards/roles';
+import { CardFace } from '../CardFace';
 
 export interface DeckBuilderProps {
   profile: PlayerProfile;
@@ -80,17 +82,17 @@ export function DeckBuilder({ profile, onChange, onDone, onBack }: DeckBuilderPr
                 ]
                   .filter(Boolean)
                   .join(' ')}
-                style={card ? { background: card.tint, color: '#10141c' } : undefined}
                 onClick={() => setSelectedSlot(selectedSlot === slot.index ? null : slot.index)}
               >
+                {card && <CardFace card={card} showName={false} />}
                 <span className="role">{slot.label}</span>
                 {card ? (
-                  <>
+                  <span className="slot-caption">
                     <strong>{card.name}</strong>
                     <span>
                       {card.aetherCost} · lvl {entry?.level ?? 11}
                     </span>
-                  </>
+                  </span>
                 ) : (
                   <span className="muted">Empty</span>
                 )}
@@ -117,19 +119,28 @@ export function DeckBuilder({ profile, onChange, onDone, onBack }: DeckBuilderPr
                 No cards in your collection fit this slot. Author one in the Card Maker.
               </div>
             )}
-            <div className="collection-grid">
-              {options.map((card) => (
-                <div
-                  key={card.id}
-                  className="deck-slot filled"
-                  style={{ background: card.tint, color: '#10141c' }}
-                  onClick={() => assign(card.id)}
-                >
-                  <strong>{card.name}</strong>
-                  <span>{card.aetherCost}</span>
+            {/* Grouped by role rather than listed flat: seventy cards in one
+                grid is a wall, and the choice a player is actually making is
+                "which of my win conditions", not "which of my cards". */}
+            {groupByRole(options).map((group) => (
+              <div key={group.role} className="role-group">
+                <div className="role-heading">
+                  <strong>{group.role.replace(/([a-z])([A-Z])/g, '$1 $2')}</strong>
+                  <span className="muted">{ROLE_BLURBS[group.role]}</span>
                 </div>
-              ))}
-            </div>
+                <div className="collection-grid">
+                  {group.cards.map((card) => (
+                    <div key={card.id} className="deck-slot filled" onClick={() => assign(card.id)}>
+                      <CardFace card={card} showName={false} />
+                      <span className="slot-caption">
+                        <strong>{card.name}</strong>
+                        <span>{card.aetherCost}</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
           </>
         )}
 

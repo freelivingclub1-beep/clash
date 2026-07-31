@@ -157,6 +157,27 @@ export const PASSIVE_EPP_COST: Record<string, number> = {
   none: 0,
   /** Reflects a share of incoming ranged damage back at the shooter. */
   reflect_ranged: 250,
+  /**
+   * The melee twin of the above. Priced a little higher because melee is what
+   * most pushes lead with, so it fires more often in an average match.
+   */
+  reflect_melee: 290,
+  /**
+   * Bonus damage against anything already below half health.
+   *
+   * Cheap for how much damage it can add, because it adds none at all until
+   * something else has done the first half of the work — and it is the
+   * defender who chooses whether that ever happens.
+   */
+  execute_low_hp: 260,
+  /**
+   * The opening blow on each new victim is doubled.
+   *
+   * Priced well under `damage_ramp` despite a similar peak: the bonus is a
+   * flat one-off per target rather than a curve, and a single big body blanks
+   * it after one swing.
+   */
+  first_strike: 300,
   /** Negates the next melee hit outright and counters. */
   parry_melee: 320,
   /** Chains attacks to additional nearby targets. */

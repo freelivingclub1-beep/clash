@@ -32,6 +32,7 @@ import { auditCard, PASSIVE_EPP_COST } from '@cards/balance';
 import { registeredPassives } from '@sim/scripts/passives';
 import { derivedStats, MAX_LEVEL, BASELINE_LEVEL } from '@cards/scaling';
 import { registeredEvolutionScripts } from '@sim/scripts/evolutions';
+import { CardFace } from '../CardFace';
 
 // ---------------------------------------------------------------------------
 // Field primitives
@@ -770,8 +771,16 @@ export function CardMaker({ onBack }: { onBack: () => void }) {
 
         {/* --- live preview -------------------------------------------------- */}
         <Section title="Live Preview">
-          {validation.ok && stats ? (
+          {validation.ok && stats && validation.card ? (
             <>
+              {/* The card as it will appear in a hand — the figure the model
+                  and tint actually produce, not a swatch of the tint alone. */}
+              <div className="maker-preview">
+                <div className="card-tile playable">
+                  <CardFace card={validation.card} />
+                  <span className="card-cost">{validation.card.aetherCost}</span>
+                </div>
+              </div>
               <div className="stat-line">
                 <span className="label">Damage per second</span>
                 <span>{stats.dps}</span>

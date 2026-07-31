@@ -244,10 +244,133 @@ body {
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
+/* --- Card face: the unit's own figure, wherever a card is shown ---------- */
+
+.card-face {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  overflow: hidden;
+  border-radius: 5px;
+}
+
+/* A soft vignette so a pale figure still reads against a pale tint. */
+.card-face::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse at 50% 38%,
+    rgba(255, 255, 255, 0.32),
+    rgba(0, 0, 0, 0.28) 78%
+  );
+  pointer-events: none;
+}
+
+.card-portrait {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  transform: translate(-50%, -50%);
+  width: 92%;
+  height: 92%;
+  object-fit: contain;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.45));
+  pointer-events: none;
+}
+
+/* A blast, not a body. Concentric rings read as an area effect at 60px wide
+   and cost nothing to draw — spells have no figure on the board to borrow. */
+.spell-glyph {
+  position: absolute;
+  left: 50%;
+  top: 44%;
+  transform: translate(-50%, -50%);
+  width: 68%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.9) 0 16%,
+    rgba(255, 255, 255, 0) 17% 31%,
+    rgba(255, 255, 255, 0.6) 32% 41%,
+    rgba(255, 255, 255, 0) 42% 60%,
+    rgba(255, 255, 255, 0.34) 61% 68%,
+    rgba(255, 255, 255, 0) 69%
+  );
+  pointer-events: none;
+}
+
+.card-name {
+  position: relative;
+  width: 100%;
+  padding: 2px 3px;
+  background: rgba(10, 14, 22, 0.72);
+  color: #f2f5fa;
+  font-size: clamp(7px, 2vw, 11px);
+  font-weight: 700;
+  line-height: 1.1;
+  text-align: center;
+  letter-spacing: 0.01em;
+}
+
+/* --- Drag portrait -------------------------------------------------------
+   Rides under the pointer so you can see *what* is about to land while the
+   translucent troops on the field show you *where*. Round and small on
+   purpose: a card-shaped panel covered the board you were reading. */
+
+.drag-portrait {
+  position: fixed;
+  width: 68px;
+  height: 68px;
+  margin: -80px 0 0 -34px;
+  border-radius: 50%;
+  border: 2px solid var(--gold);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+  z-index: 40;
+  overflow: hidden;
+}
+
+.drag-portrait img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+.drag-portrait-cost {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--aether);
+  border: 2px solid #2a1030;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Top-left, over the portrait, rather than bottom-right over the name.
+   Sharing a row with the name strip meant the badge sat on the last letter of
+   every card wider than five characters — "Archers" read as "Archer". Padding
+   the name around it only crushed the text instead, because the two clamps
+   ate most of a 72px tile. */
 .card-cost {
   position: absolute;
-  right: 3px;
-  bottom: 3px;
+  left: 3px;
+  top: 3px;
+  z-index: 2;
   min-width: clamp(16px, 4.4vw, 26px);
   height: clamp(16px, 4.4vw, 26px);
   border-radius: 50%;
@@ -261,10 +384,12 @@ body {
   border: 2px solid #2a1030;
 }
 
+/* Top-right: the cost badge now owns the top-left corner. */
 .evo-badge {
   position: absolute;
-  left: 3px;
+  right: 3px;
   top: 3px;
+  z-index: 2;
   font-size: clamp(6px, 1.7vw, 10px);
   font-weight: 800;
   padding: 1px 4px;
@@ -470,6 +595,30 @@ body {
   left: 3px;
   font-size: 0.75em;
   color: var(--muted);
+  z-index: 2;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+}
+
+/* The portrait fills the slot; the caption sits over its foot. */
+.deck-slot .card-face {
+  position: absolute;
+  inset: 0;
+  border-radius: 6px;
+}
+
+.deck-slot .slot-caption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 2px 3px;
+  background: rgba(10, 14, 22, 0.78);
+  color: #f2f5fa;
+  line-height: 1.1;
 }
 
 .collection-grid {
@@ -706,4 +855,43 @@ body {
 
 .result-stats {
   min-width: 74%;
+}
+
+/* The Card Maker's live card preview: one hand-sized tile, centred. */
+.maker-preview {
+  display: flex;
+  justify-content: center;
+  padding: 4px 0 10px;
+}
+
+.maker-preview .card-tile {
+  width: 96px;
+  flex: none;
+}
+
+/* --- collection, grouped by deck role ------------------------------------ */
+
+.role-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.role-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border-left: 3px solid var(--gold);
+  padding-left: 7px;
+}
+
+.role-heading strong {
+  font-size: clamp(11px, 3vw, 15px);
+  letter-spacing: 0.02em;
+}
+
+.role-heading .muted {
+  font-size: clamp(8px, 2.2vw, 11px);
+  line-height: 1.25;
 }
