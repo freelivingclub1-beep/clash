@@ -7,7 +7,7 @@ Hero/Champion active abilities, Tower Troops, Level 16 progression, and the nine
 ```bash
 npm install
 npm run dev        # play at http://localhost:5173
-npm test           # 80 tests
+npm test           # 122 tests
 npm run typecheck
 npm run lint
 npm run build
@@ -16,7 +16,7 @@ npm run build
 ## What's here
 
 A playable vertical slice with the full architecture: a three-minute match against a bot
-opponent, a 22-card roster, a deck builder, and the Card Maker Studio.
+opponent, a 35-card roster, a deck builder, and the Card Maker Studio.
 
 **Multiplayer is bot-only.** The Node/WebSocket server and live matchmaking queue are not
 built. What *is* built is everything that makes them a drop-in later — a DOM-free
@@ -108,6 +108,42 @@ Two notes where the implementation interprets the spec:
   decremented per ordinary play, evolving on the play after it hits zero, matches the live
   game. One constant flips it.
 
+## Card balance — the EPP budget system
+
+`src/cards/balance.ts` is the arithmetic that decides what a card is allowed to be. Aether
+buys a raw allowance (1000 Effective Power Points each); utility is paid for out of it; what
+remains is the legal stat line. Reach, splash, flight, speed, swarm count and named passives
+all carry a written-down price, so a card cannot get a mechanic for free.
+
+`auditCard` runs it backwards against an authored card. `tests/balance.test.ts` fails the
+build if any card drifts outside the tolerance band, which is what makes generating new
+cards safe to do unattended.
+
+The model was calibrated against the canonical roster rather than guessed, and that
+surfaced three real gaps worth recording:
+
+- The audit originally compared stats against the **pre-modifier** budget, so every
+  long-range or flying card reported as badly underpowered — when the penalties it had
+  already paid were precisely why its stats were low.
+- Cheap melee swarms blew past the model entirely (Skeletons audited at 2.2×). They
+  genuinely carry more raw stats per aether because each body is fragile and the whole card
+  dies to one splash spell, so swarms get an explicit per-extra-unit allowance.
+- Champions and decaying buildings were over budget for reasons the stat line cannot see —
+  one-at-a-time plus a per-use aether cost, and a 30-second lease on the stats.
+
+With those in, the median card audits at 0.95 and the whole roster fits a 0.55–1.45 band.
+
+**Spells are not balanced by EPP.** A spell's identity is what it kills, so
+`SPELL_BREAKPOINTS` is the specification for that slot. Those tests caught genuine bugs:
+Zap did not kill Goblins, Arrows did not kill Archers, and Fireball killed neither Musketeer
+nor Wizard. Crown Tower damage is capped at 32%, asserted in the simulation rather than only
+on paper.
+
+Passives live in `src/sim/scripts/passives.ts` — reflect, parry, chain, attack ramp,
+displacement, siege bonus, heal and slow auras, death split, death zone, enrage, crowd
+control immunity, spawn shield. Each has a price in the balance module, and a test fails if
+a card names a passive the price list has never heard of.
+
 ## 2026 meta systems
 
 | System | Where |
@@ -118,6 +154,7 @@ Two notes where the implementation interprets the spec:
 | Tower Troops | `src/sim/state.ts`, `src/sim/entities.ts` |
 | Level 1–16 progression | `src/cards/scaling.ts` |
 | Aether phases, overtime, sudden death | `src/sim/systems/clock.ts` |
+| Card passives and their EPP prices | `src/sim/scripts/passives.ts`, `src/cards/balance.ts` |
 
 Princess tower health comes from the equipped Tower Troop card, which is what differentiates
 Dagger Duchess (2200 HP, long reach, fast) from Cannoneer (2800 HP, ground-only, heavy).
@@ -133,9 +170,23 @@ camera produces, and it is confined entirely to `src/render/camera.ts`. The simu
 treats tiles as unit squares; screen→tile hit-testing inverts through the same transform.
 
 The arena is drawn from the same grid the simulation navigates, so the picture and the
-pathfinding cannot disagree about where the river is. Entities are placeholder geometry
-tinted by their card, which means a card authored in the Card Maker is visible on the field
-immediately without anyone drawing art for it.
+pathfinding cannot disagree about where the river is.
+
+Units are composed figures — legs, torso, head, weapon, shield — rasterised once into cached
+offscreen canvases per (card, team, pose). Art resolves from a card's `spriteKey` when that
+is a URL, fetched at runtime so any card can point at hosted art without a rebuild;
+otherwise a procedural generator derives a visual archetype from the card's own stats, so a
+card authored in the Card Maker has recognisable art the instant it exists.
+
+**No third-party art is bundled.** Shipping Clash Royale's actual textures would be
+straightforward and also copyright infringement, and the two large CC0 asset hosts are
+unreachable under this environment's network policy — so runtime URLs are the seam for real
+assets rather than a vendored folder.
+
+Animation is derived entirely from simulation state rather than held renderer-side: walk
+phase from speed and tick, spawn scale from the deploy timer, attack lunge from the attack
+cooldown along the facing vector. The renderer holds no animation state and can be rebuilt
+mid-match without a glitch.
 
 React owns the HUD and the drag gesture; the renderer owns the field and the frame loop.
 They meet at two narrow points — a mutable drag state pushed in, a coarse HUD snapshot
@@ -151,9 +202,14 @@ for evolution cards, Section G only for heroes — so the form stays usable on a
 Cards export to JSON, import back, and "Add to Roster" registers them as runtime cards that
 are immediately selectable in the deck builder and playable in a match.
 
+It also shows a live balance audit — raw budget, what the passive cost, every modifier with
+its multiplier, and the health and DPS allowance against what the card actually has. It
+calls the same `auditCard` the roster test enforces at build time, so the editor and CI
+cannot disagree about whether a card is legal.
+
 ## Testing
 
-80 tests across four suites:
+122 tests across five suites:
 
 - `tests/cards.test.ts` — roster integrity, cross-field validation, runtime cards, scaling
 - `tests/sim.test.ts` — arena geometry, aether rates, deployment rules, river avoidance,
@@ -163,6 +219,8 @@ are immediately selectable in the deck builder and playable in a match.
   and a full bot-vs-bot match played to a real outcome
 - `tests/meta.test.ts` — evolution cycles, hero abilities, tower troops, deck rules,
   profile persistence
+- `tests/balance.test.ts` — the budget model, a roster-wide audit, spell breakpoints, the
+  Crown Tower cap, and each unique passive exercised in a live match
 
 The client was additionally driven end-to-end in headless Chromium — home, deck builder,
 Card Maker, and a live match with a real drag-to-deploy — which is how three layout defects
