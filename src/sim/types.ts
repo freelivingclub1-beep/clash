@@ -127,6 +127,16 @@ export interface Entity {
   // --- projectile ----------------------------------------------------------
   sourceId: number;
   /** Homing target; projectiles fall back to their last known point. */
+  /**
+   * Where a projectile was fired from.
+   *
+   * Write-once at spawn and never read by the simulation — it exists so the
+   * renderer can work out how far along its flight a shot is, which is what
+   * an arc and a travel trail are drawn from. Deliberately excluded from the
+   * determinism hash for that reason: it is derived from state already hashed.
+   */
+  originX: Fx;
+  originY: Fx;
   destX: Fx;
   destY: Fx;
   damage: number;
@@ -206,6 +216,8 @@ export type SimEvent =
   | { type: 'hit'; x: Fx; y: Fx; damage: number; splash: boolean }
   | { type: 'towerDestroyed'; towerIndex: number; team: Team }
   | { type: 'shieldBreak'; entityId: number; team: Team; x: Fx; y: Fx }
+  /** A shot leaving a weapon, so the renderer can flash the muzzle. */
+  | { type: 'shoot'; cardId: string; team: Team; x: Fx; y: Fx; faceX: Fx; faceY: Fx }
   | { type: 'charge'; entityId: number; team: Team; x: Fx; y: Fx }
   | { type: 'ability'; team: Team; hook: string; x: Fx; y: Fx }
   | { type: 'spell'; cardId: string; team: Team; x: Fx; y: Fx; radius: Fx }

@@ -15,13 +15,14 @@
  */
 
 import { tryGetCard } from '@cards/registry';
+import type { CardDefinition } from '@cards/schema';
 import { fxToFloat } from '@sim/math/fixed';
 import { TOWER_LAYOUTS } from '@sim/nav/grid';
-import { DAMAGE_RAMP_STACK_CAP } from '@sim/constants';
+import { DAMAGE_RAMP_STACK_CAP, PROJECTILE_SPEED } from '@sim/constants';
 import type { Entity, MatchState, Team } from '@sim/types';
 import type { MatchRunner } from '@game/match';
 import { TILE_W, TILE_H, tileToLogical } from './camera';
-import { spriteFor } from './sprites';
+import { modelFor, spriteFor } from './sprites';
 import { texturePattern } from './textures';
 
 const TEAM_COLOURS: Record<Team, { primary: string; dark: string }> = {
@@ -459,21 +460,240 @@ function drawTower(
   healthBar(ctx, screenX, bodyTop - (isKing ? 22 : 34), width * 1.15, health, entity.team);
 }
 
+/**
+ * Projectile looks, keyed off the firing card's weapon.
+ *
+ * Every shot in the game used to be the same coloured dot, which meant a
+ * Musketeer's bullet, a Wizard's fireball and a Bomber's bomb were visually
+ * identical — the board told you something was in the air and nothing about
+ * what. The model registry already knows what each card is holding, so the
+ * shot can simply match the weapon that threw it.
+ */
+type ShotLook = 'arrow' | 'bolt' | 'ball' | 'spear' | 'bomb' | 'blade' | 'mote';
+
+function shotLookFor(card: CardDefinition | undefined): ShotLook {
+  if (!card) return 'mote';
+  // A spell is thrown at a point rather than fired by a weapon.
+  if (card.category === 'Spell') return 'bomb';
+  switch (modelFor(card).weapon) {
+    case 'bow':
+      return 'arrow';
+    case 'staff':
+    case 'lantern':
+      return 'bolt';
+    case 'cannon':
+    case 'drill':
+      return 'ball';
+    case 'spear':
+      return 'spear';
+    case 'bomb':
+      return 'bomb';
+    case 'dagger':
+    case 'sword':
+    case 'axe':
+    case 'scythe':
+      return 'blade';
+    default:
+      return 'mote';
+  }
+}
+
+/** Lobbed shots travel in an arc and cast a shadow; flat ones fly straight. */
+const LOBBED: ReadonlySet<ShotLook> = new Set<ShotLook>(['bomb', 'ball']);
+
+/** Draws one shot body at the origin, pointing along +X. Caller sets transform. */
+function drawShotBody(ctx: CanvasRenderingContext2D, look: ShotLook, tint: string, scale: number): void {
+  ctx.lineCap = 'round';
+  switch (look) {
+    case 'arrow':
+      ctx.strokeStyle = '#6b4b2a';
+      ctx.lineWidth = 2 * scale;
+      ctx.beginPath();
+      ctx.moveTo(-9 * scale, 0);
+      ctx.lineTo(6 * scale, 0);
+      ctx.stroke();
+      // Head.
+      ctx.fillStyle = '#d8dee8';
+      ctx.beginPath();
+      ctx.moveTo(11 * scale, 0);
+      ctx.lineTo(4 * scale, -3 * scale);
+      ctx.lineTo(4 * scale, 3 * scale);
+      ctx.closePath();
+      ctx.fill();
+      // Fletching.
+      ctx.strokeStyle = tint;
+      ctx.lineWidth = 1.5 * scale;
+      ctx.beginPath();
+      ctx.moveTo(-9 * scale, 0);
+      ctx.lineTo(-5 * scale, -3 * scale);
+      ctx.moveTo(-9 * scale, 0);
+      ctx.lineTo(-5 * scale, 3 * scale);
+      ctx.stroke();
+      break;
+
+    case 'spear':
+      ctx.strokeStyle = '#8a6a42';
+      ctx.lineWidth = 2.5 * scale;
+      ctx.beginPath();
+      ctx.moveTo(-12 * scale, 0);
+      ctx.lineTo(7 * scale, 0);
+      ctx.stroke();
+      ctx.fillStyle = '#cfd8e4';
+      ctx.beginPath();
+      ctx.moveTo(14 * scale, 0);
+      ctx.lineTo(6 * scale, -2.5 * scale);
+      ctx.lineTo(6 * scale, 2.5 * scale);
+      ctx.closePath();
+      ctx.fill();
+      break;
+
+    case 'bolt': {
+      // Glowing core inside a soft corona, so magic reads as magic.
+      const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, 11 * scale);
+      glow.addColorStop(0, '#ffffff');
+      glow.addColorStop(0.35, tint);
+      glow.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(0, 0, 11 * scale, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(0, 0, 3 * scale, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+
+    case 'ball':
+      ctx.fillStyle = '#3a4150';
+      ctx.beginPath();
+      ctx.arc(0, 0, 6 * scale, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.beginPath();
+      ctx.arc(-2 * scale, -2 * scale, 2 * scale, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+
+    case 'bomb':
+      ctx.fillStyle = '#2b2f3a';
+      ctx.beginPath();
+      ctx.arc(0, 0, 7 * scale, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#8a6a42';
+      ctx.lineWidth = 1.5 * scale;
+      ctx.beginPath();
+      ctx.moveTo(3 * scale, -5 * scale);
+      ctx.lineTo(7 * scale, -9 * scale);
+      ctx.stroke();
+      ctx.fillStyle = '#ffcf6b';
+      ctx.beginPath();
+      ctx.arc(8 * scale, -10 * scale, 2.5 * scale, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+
+    case 'blade':
+      ctx.fillStyle = '#d8dee8';
+      ctx.beginPath();
+      ctx.moveTo(9 * scale, 0);
+      ctx.lineTo(-4 * scale, -2.5 * scale);
+      ctx.lineTo(-6 * scale, 0);
+      ctx.lineTo(-4 * scale, 2.5 * scale);
+      ctx.closePath();
+      ctx.fill();
+      break;
+
+    default:
+      ctx.fillStyle = tint;
+      ctx.beginPath();
+      ctx.arc(0, 0, 5 * scale, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+  }
+}
+
 function drawProjectile(
   ctx: CanvasRenderingContext2D,
   entity: Entity,
   screenX: number,
   screenY: number,
+  viewTeam: Team,
 ): void {
   const card = tryGetCard(entity.cardId);
-  const radius = entity.splashRadius > 0 ? 9 : 6;
-  ctx.fillStyle = card?.tint ?? '#ffffff';
-  ctx.beginPath();
-  ctx.arc(screenX, screenY - TILE_H * 0.6, radius, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(0,0,0,0.4)';
-  ctx.lineWidth = 2;
-  ctx.stroke();
+  const look = shotLookFor(card);
+  const tint = card?.tint ?? '#ffffff';
+  // Bigger shot for a bigger blast: a Fireball should not read like an arrow.
+  const scale = entity.splashRadius > 0 ? 1.35 : 1;
+
+  const heading = Math.atan2(fxToFloat(entity.faceY), fxToFloat(entity.faceX));
+  const flightY = screenY - TILE_H * 0.6;
+
+  /*
+   * Flight progress, from the origin recorded at spawn. Lobbed shots use it
+   * for a parabolic lift; every shot uses it to fade in the trail so a shot
+   * that has only just left the barrel does not arrive with one already
+   * stretched out behind it.
+   */
+  const totalX = fxToFloat(entity.destX - entity.originX);
+  const totalY = fxToFloat(entity.destY - entity.originY);
+  const total = Math.hypot(totalX, totalY);
+  const doneX = fxToFloat(entity.x - entity.originX);
+  const doneY = fxToFloat(entity.y - entity.originY);
+  const progress = total > 0.01 ? Math.max(0, Math.min(1, Math.hypot(doneX, doneY) / total)) : 1;
+
+  const lobbed = LOBBED.has(look);
+  // Arc height scales with how far the shot has to travel, capped so a
+  // cross-arena Fireball does not sail off the top of the screen.
+  const arc = lobbed ? Math.min(52, total * 9) * Math.sin(progress * Math.PI) : 0;
+
+  ctx.save();
+
+  if (lobbed) {
+    // The impact ring is a real readability win, not decoration: it is the
+    // only way to see where a lobbed shot is going to land while it is still
+    // in the air.
+    const impact = tileToLogical(fxToFloat(entity.destX), fxToFloat(entity.destY), viewTeam);
+    const radius = Math.max(10, fxToFloat(entity.splashRadius) * TILE_W);
+    ctx.strokeStyle = 'rgba(255,190,110,0.55)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 5]);
+    ctx.beginPath();
+    ctx.ellipse(impact.x, impact.y, radius, radius * (TILE_H / TILE_W), 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Shadow on the ground beneath the shot, which is what sells the height.
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(screenX, screenY, 5 * scale, 2.5 * scale, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Trail: ghosts stepped back along the heading, fading out. Positions are
+  // derived from the constant flight speed rather than remembered, so nothing
+  // has to be tracked frame to frame.
+  const trailStep = fxToFloat(PROJECTILE_SPEED) * TILE_W;
+  const trailCount = look === 'bolt' || look === 'mote' ? 5 : 3;
+  for (let i = trailCount; i >= 1; i--) {
+    const back = trailStep * i * 0.9;
+    if (back > progress * total * TILE_W) continue;
+    ctx.globalAlpha = (1 - i / (trailCount + 1)) * 0.4;
+    ctx.save();
+    ctx.translate(screenX - Math.cos(heading) * back, flightY - arc - Math.sin(heading) * back);
+    ctx.rotate(heading);
+    drawShotBody(ctx, look, tint, scale * (1 - i * 0.12));
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+
+  ctx.translate(screenX, flightY - arc);
+  // A lobbed shot tumbles rather than pointing at anything; a flat one points
+  // exactly where it is going.
+  ctx.rotate(lobbed ? progress * Math.PI * 3 : heading);
+  drawShotBody(ctx, look, tint, scale);
+  ctx.restore();
 }
 
 export function drawEntities(
@@ -502,7 +722,7 @@ export function drawEntities(
         drawBuilding(ctx, entity, screenX, screenY);
         break;
       case 'projectile':
-        drawProjectile(ctx, entity, screenX, screenY);
+        drawProjectile(ctx, entity, screenX, screenY, viewTeam);
         break;
       default:
         drawTroop(ctx, entity, screenX, screenY, state.tick);

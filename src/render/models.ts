@@ -191,6 +191,20 @@ export const MODELS: Record<string, ModelSpec> = {
   tunnelRat: model('insect', 'visor', 'drill', 'none', 0.62),
   wardenMatriarch: model('humanoid', 'crown', 'hammer', 'halo', 1.05),
   rookmaster: model('humanoid', 'crown', 'scythe', 'backpack', 1.0),
+
+  // --- arsenal wave: tower troops, siege and shot variety ------------------
+  towerBombardier: model('structure', 'hood', 'bomb', 'backpack', 1.0),
+  towerFrostwarden: model('structure', 'wizardHat', 'staff', 'cape', 1.0),
+  towerPikeGuard: model('structure', 'helm', 'spear', 'shield', 1.0),
+  glasscaster: model('humanoid', 'wizardHat', 'lantern', 'none', 0.9),
+  scattergun: model('mech', 'hood', 'cannon', 'none', 0.95),
+  hexWarden: model('wraith', 'wizardHat', 'staff', 'banner', 0.98),
+  ironbark: model('golem', 'crest', 'claws', 'backpack', 1.3),
+  siegeMantis: model('insect', 'visor', 'drill', 'wings', 1.1),
+  mortarPit: model('structure', 'skull', 'bomb', 'none', 1.05),
+  beaconSpire: model('structure', 'crown', 'lantern', 'halo', 1.0),
+  standardBearer: model('brute', 'helm', 'spear', 'banner', 1.15),
+  seraphOfDusk: model('winged', 'crown', 'bow', 'halo', 1.05),
 };
 
 export function modelSpec(modelId: string, fallback: ModelSpec): ModelSpec {

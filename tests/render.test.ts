@@ -16,13 +16,21 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import '@cards/data';
 import { STARTER_DECK, BOT_DECK } from '@cards/data';
 import { createMatch, forceSpawn } from '@sim/state';
+import { fireProjectileFrom, resolveStats } from '@sim/entities';
 import { BLUE, RED } from '@sim/nav/grid';
 import { DAMAGE_RAMP_STACK_CAP } from '@sim/constants';
 import type { Entity, MatchState } from '@sim/types';
 
-vi.mock('@render/sprites', () => ({
-  spriteFor: () => ({ source: {} as CanvasImageSource, width: 64, height: 96 }),
-}));
+vi.mock('@render/sprites', async () => {
+  // `modelFor` is pure data lookup and is what projectile looks are keyed off,
+  // so it is passed through; only rasterisation needs a real canvas.
+  const models = await import('@render/models');
+  return {
+    spriteFor: () => ({ source: {} as CanvasImageSource, width: 64, height: 96 }),
+    modelFor: (card: { modelId: string }) =>
+      models.modelSpec(card.modelId, { body: 'humanoid', head: 'none', weapon: 'none', accessory: 'none', scale: 1 }),
+  };
+});
 vi.mock('@render/textures', () => ({
   texturePattern: () => '#888',
   clearTextureCache: () => {},
@@ -42,6 +50,8 @@ interface Rect {
 function recordingContext() {
   const rects: Rect[] = [];
   const roundRects: Rect[] = [];
+  const ops: string[] = [];
+  const dashes: number[][] = [];
   const context = {
     fillStyle: '#000',
     strokeStyle: '#000',
@@ -50,8 +60,8 @@ function recordingContext() {
     font: '',
     textAlign: 'left',
     textBaseline: 'alphabetic',
-    save: () => {},
-    restore: () => {},
+    save: () => ops.push('save'),
+    restore: () => ops.push('restore'),
     beginPath: () => {},
     moveTo: () => {},
     lineTo: () => {},
@@ -64,8 +74,8 @@ function recordingContext() {
     fill: () => {},
     stroke: () => {},
     closePath: () => {},
-    translate: () => {},
-    rotate: () => {},
+    translate: (x: number, y: number) => ops.push(`translate:${Math.round(x)},${Math.round(y)}`),
+    rotate: (a: number) => ops.push(`rotate:${a.toFixed(3)}`),
     scale: () => {},
     clip: () => {},
     drawImage: () => {},
@@ -78,9 +88,12 @@ function recordingContext() {
     },
     strokeRect: () => {},
     clearRect: () => {},
-    setLineDash: () => {},
+    setLineDash: (pattern: number[]) => {
+      if (pattern.length) dashes.push(pattern);
+      ops.push(`dash:${pattern.length}`);
+    },
   };
-  return { context, rects, roundRects };
+  return { context, rects, roundRects, ops, dashes };
 }
 
 /** A MatchRunner stand-in: no interpolation, positions used as-is. */
@@ -92,14 +105,14 @@ const newMatch = (): MatchState =>
   createMatch({ seed: 606, players: [{ deck: STARTER_DECK }, { deck: BOT_DECK }] });
 
 function render(state: MatchState) {
-  const { context, rects, roundRects } = recordingContext();
+  const { context, rects, roundRects, ops, dashes } = recordingContext();
   drawEntities(
     context as unknown as CanvasRenderingContext2D,
     state,
     stubRunner as never,
     BLUE,
   );
-  return Object.assign(rects, { roundRects });
+  return Object.assign(rects, { roundRects, ops, dashes });
 }
 
 /** Warm hues only: the ramp bar is the sole amber-to-red rectangle drawn. */
@@ -213,5 +226,65 @@ describe('armour plate', () => {
     guard.deployTimer = 0;
     expect(guard.shield).toBeGreaterThan(0);
     expect(render(state).roundRects).toHaveLength(1);
+  });
+});
+
+describe('projectiles', () => {
+  /** A shot in mid-flight from `from` toward `to`, at `progress` along it. */
+  const shotInFlight = (cardId: string, progress: number) => {
+    const state = newMatch();
+    const shooter = forceSpawn(state, BLUE, cardId, 8, 10);
+    shooter.deployTimer = 0;
+    const victim = forceSpawn(state, RED, 'card_troop_knight', 8, 14);
+    victim.deployTimer = 0;
+
+    const stats = resolveStats(cardId, shooter.level, false);
+    const shot = fireProjectileFrom(state, shooter, victim, 100, stats.splashRadius, false);
+    shot.x = shooter.x + Math.round((victim.x - shooter.x) * progress);
+    shot.y = shooter.y + Math.round((victim.y - shooter.y) * progress);
+    shot.faceX = victim.x - shooter.x;
+    shot.faceY = victim.y - shooter.y;
+    return { state, shot };
+  };
+
+  it('points a flat shot along its heading', () => {
+    const { state } = shotInFlight('card_troop_archers', 0.5);
+    const rotations = render(state)
+      .ops.filter((op) => op.startsWith('rotate:'))
+      .map((op) => Number(op.slice(7)));
+    expect(rotations.length).toBeGreaterThan(0);
+    // Firing straight down the board: every rotation is the same heading, not
+    // a tumble, and not zero.
+    expect(new Set(rotations.map((r) => r.toFixed(3))).size).toBe(1);
+    expect(Math.abs(rotations[0])).toBeGreaterThan(0.1);
+  });
+
+  it('tumbles a lobbed shot instead of pointing it', () => {
+    const early = shotInFlight('card_troop_bomber', 0.2);
+    const late = shotInFlight('card_troop_bomber', 0.8);
+    const angleOf = (r: ReturnType<typeof render>) =>
+      Number(r.ops.filter((op) => op.startsWith('rotate:')).at(-1)?.slice(7));
+    expect(angleOf(render(early.state))).not.toBe(angleOf(render(late.state)));
+  });
+
+  it('shows a lobbed shot where it is going to land', () => {
+    // The dashed impact ring is the only way to read a Bomber's shot before it
+    // arrives, which is the entire reason it is drawn.
+    const { state } = shotInFlight('card_troop_bomber', 0.4);
+    expect(render(state).dashes.length).toBeGreaterThan(0);
+  });
+
+  it('draws no impact ring for a flat shot', () => {
+    const { state } = shotInFlight('card_troop_archers', 0.4);
+    expect(render(state).dashes).toHaveLength(0);
+  });
+
+  it('grows the trail as the shot travels', () => {
+    const near = render(shotInFlight('card_troop_archers', 0.02).state);
+    const far = render(shotInFlight('card_troop_archers', 0.9).state);
+    const bodies = (r: ReturnType<typeof render>) => r.ops.filter((op) => op.startsWith('rotate:')).length;
+    // A shot that has only just left the bow must not arrive with a full trail
+    // already stretched out behind it.
+    expect(bodies(near)).toBeLessThan(bodies(far));
   });
 });

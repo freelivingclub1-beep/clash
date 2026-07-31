@@ -157,6 +157,8 @@ function blankEntity(id: number, team: Team, kind: Entity['kind']): Entity {
     towerIndex: -1,
     dormant: false,
     sourceId: NO_TARGET,
+    originX: 0,
+    originY: 0,
     destX: 0,
     destY: 0,
     damage: 0,
@@ -310,6 +312,8 @@ export function spawnProjectile(state: MatchState, spec: ProjectileSpec): Entity
   entity.flying = true;
   entity.sourceId = spec.sourceId;
   entity.targetId = spec.targetId;
+  entity.originX = spec.originX;
+  entity.originY = spec.originY;
   entity.destX = spec.destX;
   entity.destY = spec.destY;
   entity.damage = spec.damage;
@@ -327,6 +331,17 @@ export function fireProjectileFrom(
   splashRadius: Fx,
   appliesStatus: boolean,
 ): Entity {
+  // Render-only: a shot that appears a tile in front of the shooter with no
+  // flash reads as arriving from nowhere.
+  state.events.push({
+    type: 'shoot',
+    cardId: source.cardId,
+    team: source.team,
+    x: source.x,
+    y: source.y,
+    faceX: source.faceX,
+    faceY: source.faceY,
+  });
   return spawnProjectile(state, {
     team: source.team,
     cardId: source.cardId,

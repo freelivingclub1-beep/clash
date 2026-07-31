@@ -239,6 +239,37 @@ export class VfxSystem {
           break;
         }
 
+        case 'shoot': {
+          /*
+           * Muzzle flash, thrown along the shooter's facing.
+           *
+           * Small and very short — a quarter of the life of an impact burst.
+           * It exists to tie the shot to the shooter, and anything longer
+           * turns a rank of Archers into a permanent haze.
+           */
+          const at = tileToLogical(fxToFloat(event.x), fxToFloat(event.y), viewTeam);
+          const length = Math.hypot(fxToFloat(event.faceX), fxToFloat(event.faceY)) || 1;
+          const dirX = fxToFloat(event.faceX) / length;
+          const dirY = fxToFloat(event.faceY) / length;
+          const muzzleX = at.x + dirX * TILE_W * 0.3;
+          const muzzleY = at.y - TILE_H * 0.6 + dirY * TILE_H * 0.3;
+          for (let i = 0; i < 4; i++) {
+            const particle = this.nextParticle();
+            particle.active = true;
+            particle.x = muzzleX;
+            particle.y = muzzleY;
+            particle.vx = dirX * 1.4 + this.spread(0.5);
+            particle.vy = dirY * 1.4 + this.spread(0.5);
+            particle.maxLife = 130;
+            particle.life = particle.maxLife;
+            particle.size = 2 + this.random() * 2;
+            particle.colour = '#ffe6a8';
+            particle.shape = 'spark';
+            particle.gravity = 0;
+          }
+          break;
+        }
+
         case 'shieldBreak': {
           /*
            * The plate comes off.
