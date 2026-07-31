@@ -56,21 +56,26 @@ export function cardsByCategory(category: CardCategory): CardDefinition[] {
   return allCards().filter((c) => c.category === category);
 }
 
+/** Everything a player can actually put in a deck or collection. */
+export function selectableCards(): CardDefinition[] {
+  return allCards().filter((c) => c.selectable);
+}
+
 /** Cards eligible for battle deck slots 1-8 (everything but tower troops). */
 export function battleCards(): CardDefinition[] {
-  return allCards().filter((c) => c.category !== 'TowerTroop');
+  return selectableCards().filter((c) => c.category !== 'TowerTroop');
 }
 
 export function towerTroopCards(): CardDefinition[] {
-  return cardsByCategory('TowerTroop');
+  return selectableCards().filter((c) => c.category === 'TowerTroop');
 }
 
 export function evolutionCards(): CardDefinition[] {
-  return allCards().filter((c) => c.hasEvolution);
+  return selectableCards().filter((c) => c.hasEvolution);
 }
 
 export function heroCards(): CardDefinition[] {
-  return allCards().filter((c) => c.isHero);
+  return selectableCards().filter((c) => c.isHero);
 }
 
 /** Test-only: drop runtime cards and restore the built-in roster exactly. */

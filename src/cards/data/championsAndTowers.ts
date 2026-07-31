@@ -136,5 +136,33 @@ export const DAGGER_DUCHESS = defineCard({
   usesProjectile: true,
 });
 
+/**
+ * The King Tower's stat block. Not a card anyone owns — it is marked
+ * unselectable so it never surfaces in the collection — but modelling it as a
+ * card definition lets towers, buildings and troops share one entity code path
+ * instead of the King Tower needing a special case everywhere.
+ */
+export const KING_TOWER = defineCard({
+  name: 'King Tower',
+  id: 'card_towertroop_king_tower',
+  rarity: 'Common',
+  category: 'TowerTroop',
+  selectable: false,
+  elixirCost: 1,
+  unlockArena: 1,
+  description: 'Wakes up when damaged or when a princess tower falls.',
+  tint: '#c0c8d8',
+  baseHealth: 4824,
+  massWeight: 100,
+  bodyRadius: 2.0,
+  targetPriority: 'AirAndGround',
+  attackRange: 7.0,
+  sightRange: 7.0,
+  hitSpeed: 1.0,
+  damage: 109,
+  firstAttackDelay: 0.8,
+  usesProjectile: true,
+});
+
 export const CHAMPION_CARDS = [GOLDEN_KNIGHT, ARCHER_QUEEN];
-export const TOWER_TROOP_CARDS = [TOWER_PRINCESS, CANNONEER, DAGGER_DUCHESS];
+export const TOWER_TROOP_CARDS = [TOWER_PRINCESS, CANNONEER, DAGGER_DUCHESS, KING_TOWER];

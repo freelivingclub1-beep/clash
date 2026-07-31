@@ -87,6 +87,12 @@ const identitySchema = z.object({
   elixirCost: z.number().int().min(1).max(10),
   unlockArena: z.number().int().min(1).max(24),
   description: z.string().max(400).default(''),
+  /**
+   * False for cards that exist only as engine fixtures — the King Tower's
+   * stat block, for instance — so they resolve by id like anything else but
+   * never appear in the deck builder or collection.
+   */
+  selectable: z.boolean().default(true),
 });
 
 /** B — asset & render configuration. */
