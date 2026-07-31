@@ -98,6 +98,16 @@ export const DEFAULT_BODY_RADIUS: Fx = fx(0.4);
 export const CHARGE_SPEED_MULTIPLIER: Fx = fx(2);
 export const CHARGE_DAMAGE_MULTIPLIER = 2;
 
+/**
+ * Ceiling on `damage_ramp` stacks.
+ *
+ * The ramp is superlinear, so without a cap a unit left alone on a tower would
+ * eventually hit for absurd numbers. Ten stacks is deliberately a long channel
+ * — several seconds of uninterrupted biting — which is what makes the payoff
+ * worth defending against and the reset worth spending a card on.
+ */
+export const DAMAGE_RAMP_STACK_CAP = 10;
+
 /** Projectile travel speed in tiles per tick. */
 export const PROJECTILE_SPEED: Fx = fxDiv(fx(9), fx(TICK_HZ));
 

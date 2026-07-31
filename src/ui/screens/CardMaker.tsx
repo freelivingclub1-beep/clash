@@ -514,6 +514,11 @@ export function CardMaker({ onBack }: { onBack: () => void }) {
             value={draft.usesProjectile}
             onChange={(v) => update('usesProjectile', v)}
           />
+          <Toggle
+            label="Hunts troops before structures"
+            value={draft.prefersTroops}
+            onChange={(v) => update('prefersTroops', v)}
+          />
         </Section>
 
         {/* --- E ------------------------------------------------------------ */}

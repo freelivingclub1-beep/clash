@@ -17,6 +17,7 @@
 import { tryGetCard } from '@cards/registry';
 import { fxToFloat } from '@sim/math/fixed';
 import { TOWER_LAYOUTS } from '@sim/nav/grid';
+import { DAMAGE_RAMP_STACK_CAP } from '@sim/constants';
 import type { Entity, MatchState, Team } from '@sim/types';
 import type { MatchRunner } from '@game/match';
 import { TILE_W, TILE_H, tileToLogical } from './camera';
@@ -153,6 +154,22 @@ function drawTroop(
   if (entity.poisonTicks > 0) {
     ctx.fillStyle = 'rgba(120,200,90,0.28)';
     ctx.fillRect(screenX - drawWidth / 2, topY, drawWidth, drawHeight);
+  }
+
+  // Ramp tell. A unit whose damage or rate of fire is multiplying has to show
+  // it, or the opponent has no cue that the thing chewing on their tower is
+  // about to hit five times harder — and no reason to reach for the reset
+  // spell that answers it. The bar heats from amber to red as it saturates.
+  if (
+    entity.passiveCharges > 0 &&
+    (card.passiveId === 'damage_ramp' || card.passiveId === 'attack_ramp')
+  ) {
+    const fill = Math.min(1, entity.passiveCharges / DAMAGE_RAMP_STACK_CAP);
+    const width = radius * 2.2;
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.fillRect(screenX - width / 2, topY - 21, width, 4);
+    ctx.fillStyle = fill >= 1 ? '#ff4d3d' : `rgb(255, ${Math.round(190 - 120 * fill)}, 60)`;
+    ctx.fillRect(screenX - width / 2, topY - 21, width * fill, 4);
   }
 
   if (entity.hp < entity.maxHp) {

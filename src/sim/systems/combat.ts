@@ -8,7 +8,7 @@
  */
 
 import { type Fx, fx, fxLenSq, fxMul, fxRoundToInt, FX_ONE } from '../math/fixed';
-import { TICK_HZ, CHARGE_DAMAGE_MULTIPLIER } from '../constants';
+import { TICK_HZ, CHARGE_DAMAGE_MULTIPLIER, DAMAGE_RAMP_STACK_CAP } from '../constants';
 import { enemyOf } from '../nav/grid';
 import {
   applyDamage,
@@ -25,6 +25,41 @@ import type { CardDefinition } from '@cards/schema';
 import { type Entity, type MatchState, NO_TARGET } from '../types';
 
 const RAGE_HIT_SPEED: Fx = fx(0.7); // rage cuts the cooldown by 30%
+
+/**
+ * Wipe a damage ramp back to its first, weakest bite.
+ *
+ * Called from three places — a reset spell, the victim dying, and the attacker
+ * switching victims — because all three are the same idea: the channel that was
+ * being rewarded has ended.
+ */
+export function resetDamageRamp(entity: Entity): void {
+  /*
+   * Scoped to the two ramp passives on purpose.
+   *
+   * `passiveCharges` is shared storage: `parry_melee` and `self_replicate` use
+   * it as a one-shot ready flag, so blindly zeroing it here would let a Zap
+   * quietly delete their ability instead of resetting a ramp.
+   */
+  const { passiveId } = resolveStats(entity.cardId, entity.level, entity.evolved).card;
+  if (passiveId !== 'damage_ramp' && passiveId !== 'attack_ramp') return;
+  entity.passiveCharges = 0;
+  entity.passiveTargetId = NO_TARGET;
+}
+
+/**
+ * Multiplier on a swing from `stacks` consecutive hits on the same victim.
+ *
+ * Growth is `stacks * (stacks + 3)`, i.e. 0, 4, 10, 18, 28... — superlinear, so
+ * the damage climbs *quicker and quicker* the longer the channel holds, rather
+ * than adding a flat step each time. Deliberately not `Math.pow`: exponentiation
+ * is implementation-approximated and would drift between engines, and the sim
+ * has to hash identically everywhere.
+ */
+function rampMultiplier(stacks: number, magnitude: number): number {
+  const growth = stacks * (stacks + 3);
+  return 1 + (magnitude * growth) / 10;
+}
 
 /**
  * Apply a card's on-hit status to a victim.
@@ -47,6 +82,10 @@ export function applyStatus(card: CardDefinition, victim: Entity, ticks: number)
       if (!isStructure) victim.stunTicks = Math.max(victim.stunTicks, ticks);
       victim.attackCooldown = Math.max(victim.attackCooldown, ticks);
       victim.windupDone = false;
+      // "Attack progress" includes a ramp mid-channel: a reset spell is the
+      // intended counter to a unit that has been chewing on one target long
+      // enough for its damage to have multiplied.
+      resetDamageRamp(victim);
       break;
     case 'Slow':
       if (!isStructure) {
@@ -213,6 +252,19 @@ export function combat(state: MatchState): void {
     // walk. The reset happens here rather than in movement because impact is
     // what ends a charge, and movement cannot see an attack landing.
     let damage = stats.damage;
+
+    // A ramp reads its stack count *before* incrementing, so the first bite on
+    // a fresh victim always lands at the card's printed damage and the reward
+    // is strictly for staying on the same thing.
+    if (card.passiveId === 'damage_ramp') {
+      if (entity.passiveTargetId !== target.id) {
+        entity.passiveTargetId = target.id;
+        entity.passiveCharges = 0;
+      }
+      damage = Math.round(damage * rampMultiplier(entity.passiveCharges, card.passiveMagnitude));
+      entity.passiveCharges = Math.min(DAMAGE_RAMP_STACK_CAP, entity.passiveCharges + 1);
+    }
+
     if (entity.charging) {
       damage *= CHARGE_DAMAGE_MULTIPLIER;
       entity.charging = false;
@@ -256,5 +308,8 @@ export function releaseLocksOn(state: MatchState, deadId: number): void {
       entity.windupDone = false;
     }
     if (entity.tauntSourceId === deadId) entity.tauntSourceId = NO_TARGET;
+    // A kill ends the channel: whoever was ramping on the corpse starts its
+    // next victim from the weakest bite again.
+    if (entity.passiveTargetId === deadId) resetDamageRamp(entity);
   }
 }

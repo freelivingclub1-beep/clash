@@ -162,6 +162,9 @@ export const MODELS: Record<string, ModelSpec> = {
   // --- shielded and charging archetypes ------------------------------------
   spearGuard: model('humanoid', 'skull', 'spear', 'shield', 0.78),
   ironCharger: model('quadruped', 'visor', 'axe', 'shield', 1.2),
+  // Small and plated: the visor and shield read as the armour a single hit
+  // strips, and the claws as the bite that keeps getting worse.
+  eliteHound: model('quadruped', 'visor', 'claws', 'shield', 0.68),
 };
 
 export function modelSpec(modelId: string, fallback: ModelSpec): ModelSpec {

@@ -58,21 +58,30 @@ function findBestTarget(state: MatchState, entity: Entity): Entity | undefined {
   const priority = stats.card.targetPriority;
   const foe = enemyOf(entity.team);
 
-  let best: Entity | undefined;
-  let bestDistSq = stats.sightRangeSq;
+  /** Nearest valid candidate, optionally restricted to living combatants. */
+  const scan = (troopsOnly: boolean): Entity | undefined => {
+    let best: Entity | undefined;
+    let bestDistSq = stats.sightRangeSq;
 
-  for (const candidate of state.entities) {
-    if (candidate.team !== foe) continue;
-    if (!isTargetable(candidate)) continue;
-    if (!canTarget(priority, candidate)) continue;
+    for (const candidate of state.entities) {
+      if (candidate.team !== foe) continue;
+      if (!isTargetable(candidate)) continue;
+      if (!canTarget(priority, candidate)) continue;
+      if (troopsOnly && candidate.kind !== 'troop') continue;
 
-    const distSq = fxLenSq(candidate.x - entity.x, candidate.y - entity.y);
-    if (distSq > stats.sightRangeSq) continue;
-    if (best && distSq >= bestDistSq) continue;
-    best = candidate;
-    bestDistSq = distSq;
-  }
-  return best;
+      const distSq = fxLenSq(candidate.x - entity.x, candidate.y - entity.y);
+      if (distSq > stats.sightRangeSq) continue;
+      if (best && distSq >= bestDistSq) continue;
+      best = candidate;
+      bestDistSq = distSq;
+    }
+    return best;
+  };
+
+  // Troop-hunters sweep for combatants first and only fall back to structures
+  // when the field is clear, rather than taking whatever happens to be closest.
+  if (stats.card.prefersTroops) return scan(true) ?? scan(false);
+  return scan(false);
 }
 
 /**

@@ -223,6 +223,15 @@ export const PASSIVE_EPP_COST: Record<string, number> = {
   terrain_walk: 260,
   /** Accelerates over uninterrupted distance, then lands a doubled hit. */
   charge: 300,
+  /**
+   * Damage escalates the longer it stays on one target.
+   *
+   * By far the most expensive mechanic in the table, and it has to be: the
+   * audit can only see base damage, and a card whose damage multiplies sevenfold
+   * over a sustained bite is worth vastly more than that number suggests. The
+   * price is what forces the stat line underneath it to be genuinely fragile.
+   */
+  damage_ramp: 2300,
 };
 
 export type PassiveId = keyof typeof PASSIVE_EPP_COST;

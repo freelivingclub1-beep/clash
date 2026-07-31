@@ -511,6 +511,22 @@ register('terrain_walk', {
  */
 register('charge', {});
 
+/**
+ * Damage ramp — each consecutive bite on the same victim hits harder.
+ *
+ * Hooks are the wrong place for this one, for the same reason as `charge`: the
+ * ramp has to scale the damage of the swing that is being made, and `onHit`
+ * fires after that swing has already landed. `combat` reads the stack count,
+ * scales the hit, then increments — so the registry entry exists to declare the
+ * passive known, and the arithmetic lives next to the attack it modifies.
+ *
+ * The stack lives on `passiveTargetId`/`passiveCharges`, which is also what
+ * makes the resets fall out for free: a new victim resets it in `combat`, a
+ * dead victim resets it in `releaseLocksOn`, and a reset spell resets it in
+ * `applyStatus`.
+ */
+register('damage_ramp', {});
+
 // ---------------------------------------------------------------------------
 
 export function passiveHooks(passiveId: string): PassiveHooks | undefined {

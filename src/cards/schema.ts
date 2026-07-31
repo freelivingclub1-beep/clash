@@ -152,6 +152,15 @@ const combatSchema = z.object({
   firstAttackDelay: z.number().min(0).max(5).default(0.2),
   /** Ranged attacks spawn a travelling projectile; melee applies instantly. */
   usesProjectile: z.boolean().default(false),
+  /**
+   * Hunt troops before structures.
+   *
+   * Without this a unit simply takes the nearest valid target, so a tower in
+   * range outranks a troop standing further away. Carries no EPP price: being
+   * distractible is as much a drawback as an advantage — it makes the card
+   * worse at closing out a tower, which is the trade.
+   */
+  prefersTroops: z.boolean().default(false),
 });
 
 /** E — special ability & effect hooks. */
