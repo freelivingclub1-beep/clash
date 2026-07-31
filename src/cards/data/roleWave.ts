@@ -46,7 +46,7 @@ export const SEWER_RATS = defineCard({
   description: 'Five quick, flimsy bodies. Swarms anything that stands still.',
   tint: '#7d7466',
   modelId: 'sewerRat',
-  baseHealth: 112,
+  baseHealth: 104,
   spawnCount: 5,
   massWeight: 5,
   speedClass: 'VeryFast',
@@ -55,7 +55,7 @@ export const SEWER_RATS = defineCard({
   attackRange: 0.4,
   sightRange: 5.0,
   hitSpeed: 0.9,
-  damage: 60,
+  damage: 55,
   firstAttackDelay: 0.3,
 });
 

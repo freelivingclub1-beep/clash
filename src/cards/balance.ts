@@ -207,6 +207,15 @@ export const PASSIVE_EPP_COST: Record<string, number> = {
   /** Slows everything in a radius while alive. */
   aura_slow: 230,
   /**
+   * Digs to any tile on the board, arriving untargetable and unseen.
+   *
+   * The most expensive positional mechanic in the table. Ignoring territory
+   * entirely means it can start behind a tower, and no stat line can price
+   * "your defence is in the wrong place" — only the dig time can, which is why
+   * the card that carries it is deliberately fragile once it is up.
+   */
+  tunnel: 900,
+  /**
    * Tops nearby allies up to a small armour layer every few seconds.
    *
    * Dearer than the healing aura because overkill absorption means a point of

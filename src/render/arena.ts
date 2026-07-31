@@ -294,13 +294,14 @@ export function drawDeployOverlay(
   rights: DeployRights,
   flying: boolean,
   viewTeam: Team,
+  anywhere = false,
 ): void {
   ctx.save();
   ctx.globalAlpha = 0.2;
   ctx.fillStyle = '#ffffff';
   for (let ty = 0; ty < GRID_H; ty++) {
     for (let tx = 0; tx < GRID_W; tx++) {
-      if (!canDeployAt(grid, team, tx, ty, rights, flying)) continue;
+      if (!canDeployAt(grid, team, tx, ty, rights, flying, anywhere)) continue;
       const rect = tileRect(tx, ty, viewTeam);
       ctx.fillRect(rect.x, rect.y, rect.w + 0.5, rect.h + 0.5);
     }

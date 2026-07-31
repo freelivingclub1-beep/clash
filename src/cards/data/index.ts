@@ -16,6 +16,7 @@ import { SHIELDED_CARDS } from './shielded';
 import { ROLE_WAVE_CARDS } from './roleWave';
 import { DEPTH_WAVE_CARDS } from './depthWave';
 import { ARSENAL_WAVE_CARDS } from './arsenalWave';
+import { SPECTACLE_WAVE_CARDS } from './spectacleWave';
 
 export const BUILTIN_CARDS = [
   ...TROOP_CARDS,
@@ -29,6 +30,7 @@ export const BUILTIN_CARDS = [
   ...ROLE_WAVE_CARDS,
   ...DEPTH_WAVE_CARDS,
   ...ARSENAL_WAVE_CARDS,
+  ...SPECTACLE_WAVE_CARDS,
 ];
 
 for (const card of BUILTIN_CARDS) registerCard(card);
@@ -43,6 +45,7 @@ export * from './shielded';
 export * from './roleWave';
 export * from './depthWave';
 export * from './arsenalWave';
+export * from './spectacleWave';
 
 /** A sensible starting deck: 8 battle cards + a tower troop. */
 export const STARTER_DECK: string[] = [

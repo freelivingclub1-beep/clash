@@ -218,6 +218,17 @@ export type SimEvent =
   | { type: 'shieldBreak'; entityId: number; team: Team; x: Fx; y: Fx }
   /** A shot leaving a weapon, so the renderer can flash the muzzle. */
   | { type: 'shoot'; cardId: string; team: Team; x: Fx; y: Fx; faceX: Fx; faceY: Fx }
+  /**
+   * An arc of energy between two points — a chain jumping to its next victim,
+   * or a stun spell earthing itself into everything it caught.
+   *
+   * Render-only, like every other event, but this one is the whole reason a
+   * chain reads as a chain: without it the second and third targets simply
+   * lost health for no visible reason.
+   */
+  | { type: 'arc'; team: Team; x: Fx; y: Fx; toX: Fx; toY: Fx; kind: 'chain' | 'stun' }
+  /** A tunneller breaking ground, which is the first anyone sees of it. */
+  | { type: 'surface'; cardId: string; team: Team; x: Fx; y: Fx }
   | { type: 'charge'; entityId: number; team: Team; x: Fx; y: Fx }
   | { type: 'ability'; team: Team; hook: string; x: Fx; y: Fx }
   | { type: 'spell'; cardId: string; team: Team; x: Fx; y: Fx; radius: Fx }

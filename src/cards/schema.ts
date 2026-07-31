@@ -184,6 +184,15 @@ const combatSchema = z.object({
    * worse at closing out a tower, which is the trade.
    */
   prefersTroops: z.boolean().default(false),
+  /**
+   * May be dropped anywhere on the board, including the enemy's half.
+   *
+   * On its own this would simply be "spawn behind their tower", which is why
+   * it only ever appears together with the `tunnel` passive: the unit has to
+   * travel there underground first, and the further you place it the longer
+   * that takes.
+   */
+  deployAnywhere: z.boolean().default(false),
 });
 
 /** E — special ability & effect hooks. */

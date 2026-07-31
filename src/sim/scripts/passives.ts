@@ -20,6 +20,7 @@
 
 import { type Fx, fx, fxLenSq, fxMul, FX_ONE } from '../math/fixed';
 import { TICK_HZ } from '../constants';
+import { GRID_H } from '../constants';
 import { enemyOf } from '../nav/grid';
 import { applyDamage, isTargetable, resolveStats, spawnTroop } from '../entities';
 import type { Entity, MatchState } from '../types';
@@ -206,6 +207,17 @@ register('chain_attack', {
     // card stops having a counter.
     for (const target of chained.slice(0, 2)) {
       applyDamage(state, target, Math.round(stats.damage * magnitude));
+      // The arc is what makes a chain legible. Without it the extra victims
+      // just lose health with nothing on screen connecting them to the hit.
+      state.events.push({
+        type: 'arc',
+        team: self.team,
+        x: victim.x,
+        y: victim.y,
+        toX: target.x,
+        toY: target.y,
+        kind: 'chain',
+      });
     }
   },
 });
@@ -607,6 +619,47 @@ register('charge', {});
  * `applyStatus`.
  */
 register('damage_ramp', {});
+
+/**
+ * Tunnel — surfaces wherever it was dropped, after digging its way there.
+ *
+ * The dig is the whole card. It can be placed on any tile on the board, but it
+ * spends the journey underground: untargetable, undrawn, and completely absent
+ * from the board until it comes up. The further from your own back line you
+ * placed it, the longer that takes — dropping one just over the river is quick,
+ * dropping one behind their king tower gives them several seconds to notice
+ * their aether bar move and prepare for it.
+ *
+ * Implemented on `deployTimer`, which the engine already treats as "not yet
+ * targetable and taking no actions", rather than as a new entity state — so
+ * nothing else in the tick loop needs to know tunnelling exists.
+ */
+register('tunnel', {
+  onSpawn: (_state, self, magnitude) => {
+    /*
+     * Rows from the digger's own back line, so distance is measured from where
+     * it started rather than from the middle of the board. Blue digs upward
+     * from row 0, red downward from row 31.
+     */
+    const row = self.y / FX_ONE;
+    const travelled = self.team === 0 ? row : GRID_H - row;
+    const seconds = Math.max(0.6, (travelled * magnitude) / 10);
+    self.deployTimer = Math.round(seconds * TICK_HZ);
+  },
+  onTick: (state, self) => {
+    // Fires on the first tick after the dig ends — `passiveTick` skips
+    // anything still on a deploy timer, so this is exactly the surfacing tick.
+    if (self.passiveCharges > 0) return;
+    self.passiveCharges = 1;
+    state.events.push({
+      type: 'surface',
+      cardId: self.cardId,
+      team: self.team,
+      x: self.x,
+      y: self.y,
+    });
+  },
+});
 
 // ---------------------------------------------------------------------------
 

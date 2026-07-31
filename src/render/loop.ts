@@ -35,6 +35,8 @@ export interface DragState {
   /** The card being placed, so the ghost can draw its actual figures. */
   cardId: string;
   flying: boolean;
+  /** True for a tunneller, which may be dropped on any tile on the board. */
+  anywhere: boolean;
 }
 
 export interface HudSnapshot {
@@ -152,6 +154,7 @@ export class BattleRenderer {
         state.players[this.runner.localTeam].deployRights,
         this.drag.flying,
         this.viewTeam,
+        this.drag.anywhere,
       );
     }
 
@@ -163,6 +166,8 @@ export class BattleRenderer {
     drawEntities(ctx, state, this.runner, this.viewTeam);
     drawEffects(ctx, state, this.viewTeam);
 
+    // Arcs first: a bolt belongs behind the figures it connects, not over them.
+    this.vfx.drawBolts(ctx);
     this.vfx.drawParticles(ctx);
 
     if (this.drag) {

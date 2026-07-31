@@ -10,8 +10,8 @@ import { createMatch, forceSpawn } from '@sim/state';
 import { stepMatch, stepMatchBy } from '@sim/tick';
 import { BLUE, RED } from '@sim/nav/grid';
 import { AP_PER_AETHER, TICK_HZ } from '@sim/constants';
-import { applyDamage, resolveStats } from '@sim/entities';
-import { applyStatus } from '@sim/systems/combat';
+import { applyDamage, isTargetable, resolveStats } from '@sim/entities';
+import { applyStatus, applyDamageAtPoint } from '@sim/systems/combat';
 import { hasPassive } from '@sim/scripts/passives';
 import { auditCard } from '@cards/balance';
 import type { Command, Entity, MatchState } from '@sim/types';
@@ -330,5 +330,158 @@ describe('depth-wave cards', () => {
     for (const rat of rats) rat.speed = 0;
     stepMatchBy(state, TICK_HZ);
     expect(rats.every((rat) => rat.invisibleTicks === 0)).toBe(true);
+  });
+});
+
+describe('tunnelling', () => {
+  const delver = 'card_troop_delver';
+
+  it('is a registered, priced mechanic that may be dropped anywhere', () => {
+    expect(hasPassive('tunnel')).toBe(true);
+    const card = getCard(delver);
+    expect(card.deployAnywhere).toBe(true);
+    expect(auditCard(card).withinTolerance).toBe(true);
+  });
+
+  it('accepts a drop deep in enemy territory', () => {
+    const state = newMatch();
+    state.players[BLUE].hand[0] = delver;
+    state.players[BLUE].aetherPoints = 10 * AP_PER_AETHER;
+    // Row 28 is behind the enemy king tower — normally rejected outright.
+    stepMatch(state, [{ type: 'deploy', team: BLUE, handIndex: 0, tileX: 8, tileY: 22 }]);
+    expect(state.entities.some((e) => e.alive && e.cardId === delver)).toBe(true);
+  });
+
+  it('digs longer the further across the board it is placed', () => {
+    const dig = (tileY: number) => {
+      const state = newMatch();
+      state.players[BLUE].hand[0] = delver;
+      state.players[BLUE].aetherPoints = 10 * AP_PER_AETHER;
+      stepMatch(state, [{ type: 'deploy', team: BLUE, handIndex: 0, tileX: 8, tileY }]);
+      return state.entities.find((e) => e.alive && e.cardId === delver)?.deployTimer ?? 0;
+    };
+    // Just in front of your own tower against deep in theirs.
+    expect(dig(22)).toBeGreaterThan(dig(6) * 2);
+  });
+
+  it('cannot be seen or touched while it is underground', () => {
+    const state = newMatch();
+    const digger = forceSpawn(state, BLUE, delver, 8, 20);
+    expect(digger.deployTimer).toBeGreaterThan(0);
+    expect(isTargetable(digger)).toBe(false);
+
+    // A spell dropped exactly on top of it does nothing, which is the real
+    // test — "untargetable" has to mean a Fireball misses, not merely that
+    // nothing walks at it.
+    const before = digger.hp;
+    state.players[RED].hand[0] = 'card_spell_fireball';
+    state.players[RED].aetherPoints = 10 * AP_PER_AETHER;
+    stepMatch(state, [{ type: 'deploy', team: RED, handIndex: 0, tileX: 8, tileY: 20 }]);
+    stepMatchBy(state, TICK_HZ);
+    expect(digger.hp).toBe(before);
+  });
+
+  it('announces itself only when it breaks ground', () => {
+    const state = newMatch();
+    const digger = forceSpawn(state, BLUE, delver, 8, 12);
+    const digTicks = digger.deployTimer;
+
+    let surfaced = 0;
+    for (let i = 0; i < digTicks + 10; i++) {
+      stepMatch(state);
+      surfaced += state.events.filter((e) => e.type === 'surface').length;
+    }
+    expect(surfaced).toBe(1);
+    expect(isTargetable(digger)).toBe(true);
+  });
+});
+
+describe('chain lightning', () => {
+  it('draws an arc to every target it forks to', () => {
+    const state = newMatch();
+    const caster = park(forceSpawn(state, BLUE, 'card_troop_stormcaller', 8, 12));
+    // Three bodies close together: the shot forks to two of them.
+    for (const x of [7, 8, 9]) park(forceSpawn(state, RED, 'card_troop_knight', x, 14));
+
+    let arcs = 0;
+    for (let i = 0; i < TICK_HZ * 6 && arcs === 0; i++) {
+      stepMatch(state);
+      arcs += state.events.filter((e) => e.type === 'arc' && e.kind === 'chain').length;
+    }
+    expect(arcs).toBeGreaterThan(0);
+    expect(caster.alive).toBe(true);
+  });
+
+  it('earths a stun spell into everything it caught', () => {
+    const state = newMatch();
+    for (const x of [7, 8, 9]) park(forceSpawn(state, RED, 'card_troop_goblins', x, 12));
+
+    state.players[BLUE].hand[0] = 'card_spell_zap';
+    state.players[BLUE].aetherPoints = 10 * AP_PER_AETHER;
+    stepMatch(state, [{ type: 'deploy', team: BLUE, handIndex: 0, tileX: 8, tileY: 12 }]);
+
+    let arcs = 0;
+    for (let i = 0; i < TICK_HZ * 3 && arcs === 0; i++) {
+      stepMatch(state);
+      arcs += state.events.filter((e) => e.type === 'arc' && e.kind === 'stun').length;
+    }
+    // One bolt per body caught, so the picture matches what actually got hit.
+    expect(arcs).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe('piercing line', () => {
+  const lance = 'card_troop_arc_lance';
+
+  it('hits everything queued up behind the front body', () => {
+    /*
+     * `PiercingLine` was declared in the schema and implemented nowhere, so
+     * a card could name it and it behaved as an ordinary blast.
+     */
+    const state = newMatch();
+    park(forceSpawn(state, BLUE, lance, 8, 8));
+    const front = park(forceSpawn(state, RED, 'card_troop_knight', 8, 12));
+    const behind = park(forceSpawn(state, RED, 'card_troop_knight', 8, 13));
+
+    for (let i = 0; i < TICK_HZ * 8 && front.hp === front.maxHp; i++) stepMatch(state);
+    expect(front.hp).toBeLessThan(front.maxHp);
+    expect(behind.hp).toBeLessThan(behind.maxHp);
+  });
+
+  it('carries on past its target rather than stopping at it', () => {
+    // Piercing that stopped at the target punished the bodies queued in front
+    // of it, which is backwards — stacking *behind* the tank is the mistake.
+    const state = newMatch();
+    park(forceSpawn(state, BLUE, lance, 8, 8));
+    const front = park(forceSpawn(state, RED, 'card_troop_knight', 8, 12));
+    const behind = park(forceSpawn(state, RED, 'card_troop_knight', 8, 13));
+
+    for (let i = 0; i < TICK_HZ * 8 && front.hp === front.maxHp; i++) stepMatch(state);
+    expect(behind.hp).toBeLessThan(behind.maxHp);
+  });
+
+  it('spares a body standing off the line', () => {
+    /*
+     * Driven through `applyDamageAtPoint` with a fixed impact point rather
+     * than through a live match: in a match the lance picks its own target,
+     * and a body placed "off the line" may simply become the new line. This
+     * asks the narrower question the geometry is responsible for.
+     */
+    const state = newMatch();
+    const shooter = park(forceSpawn(state, BLUE, lance, 8, 8));
+    const onLine = park(forceSpawn(state, RED, 'card_troop_knight', 8, 11));
+    const aside = park(forceSpawn(state, RED, 'card_troop_knight', 12, 11));
+    const target = park(forceSpawn(state, RED, 'card_troop_knight', 8, 13));
+
+    const card = getCard(lance);
+    const stats = resolveStats(lance, shooter.level, false);
+    applyDamageAtPoint(
+      state, BLUE, target.x, target.y, stats.splashRadius, 200, card, 0, target.id, shooter,
+    );
+
+    expect(onLine.hp).toBeLessThan(onLine.maxHp);
+    expect(target.hp).toBeLessThan(target.maxHp);
+    // Four tiles to the side of a beam 0.7 tiles wide.
+    expect(aside.hp).toBe(aside.maxHp);
   });
 });

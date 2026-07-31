@@ -22,6 +22,7 @@ import { TILE_W, TILE_H, tileToLogical } from './camera';
 
 const MAX_PARTICLES = 600;
 const MAX_NUMBERS = 60;
+const MAX_BOLTS = 40;
 
 type ParticleShape = 'spark' | 'puff' | 'ring' | 'shard';
 
@@ -37,6 +38,27 @@ interface Particle {
   colour: string;
   shape: ParticleShape;
   gravity: number;
+}
+
+/**
+ * A lightning arc between two points.
+ *
+ * Not a particle: a particle is a point with a velocity, and an arc is a line
+ * with two fixed ends and a shape between them. The jag offsets are baked at
+ * spawn so the bolt holds its silhouette while it fades instead of reshuffling
+ * every frame into noise.
+ */
+interface Bolt {
+  active: boolean;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  jag: number[];
+  life: number;
+  maxLife: number;
+  colour: string;
+  width: number;
 }
 
 interface DamageNumber {
@@ -67,6 +89,10 @@ function blankParticle(): Particle {
   };
 }
 
+function blankBolt(): Bolt {
+  return { active: false, x1: 0, y1: 0, x2: 0, y2: 0, jag: [], life: 0, maxLife: 1, colour: '#fff', width: 2 };
+}
+
 function blankNumber(): DamageNumber {
   return { active: false, x: 0, y: 0, vy: 0, life: 0, maxLife: 1, text: '', colour: '#fff', size: 20 };
 }
@@ -74,8 +100,10 @@ function blankNumber(): DamageNumber {
 export class VfxSystem {
   private readonly particles: Particle[] = Array.from({ length: MAX_PARTICLES }, blankParticle);
   private readonly numbers: DamageNumber[] = Array.from({ length: MAX_NUMBERS }, blankNumber);
+  private readonly bolts: Bolt[] = Array.from({ length: MAX_BOLTS }, blankBolt);
   private particleCursor = 0;
   private numberCursor = 0;
+  private boltCursor = 0;
 
   /** Current shake magnitude in logical pixels; decays every frame. */
   private shake = 0;
@@ -91,6 +119,12 @@ export class VfxSystem {
     const particle = this.particles[this.particleCursor];
     this.particleCursor = (this.particleCursor + 1) % MAX_PARTICLES;
     return particle;
+  }
+
+  private nextBolt(): Bolt {
+    const bolt = this.bolts[this.boltCursor];
+    this.boltCursor = (this.boltCursor + 1) % MAX_BOLTS;
+    return bolt;
   }
 
   private nextNumber(): DamageNumber {
@@ -152,6 +186,30 @@ export class VfxSystem {
     particle.colour = colour;
     particle.shape = 'ring';
     particle.gravity = 0;
+  }
+
+  /**
+   * A jagged arc from one point to another.
+   *
+   * Segments are proportional to length so a long chain does not read as a
+   * gentle curve while a short one reads as a zigzag.
+   */
+  arc(x1: number, y1: number, x2: number, y2: number, colour: string, life = 220): void {
+    const bolt = this.nextBolt();
+    bolt.active = true;
+    bolt.x1 = x1;
+    bolt.y1 = y1;
+    bolt.x2 = x2;
+    bolt.y2 = y2;
+    bolt.maxLife = life;
+    bolt.life = life;
+    bolt.colour = colour;
+    bolt.width = 2.5;
+
+    const span = Math.hypot(x2 - x1, y2 - y1);
+    const segments = Math.max(3, Math.min(9, Math.round(span / 14)));
+    bolt.jag = [];
+    for (let i = 1; i < segments; i++) bolt.jag.push(this.spread(Math.min(16, span * 0.18)));
   }
 
   damageNumber(x: number, y: number, amount: number, colour = '#ffffff', big = false): void {
@@ -239,6 +297,28 @@ export class VfxSystem {
           break;
         }
 
+        case 'arc': {
+          const from = tileToLogical(fxToFloat(event.x), fxToFloat(event.y), viewTeam);
+          const to = tileToLogical(fxToFloat(event.toX), fxToFloat(event.toY), viewTeam);
+          const lift = TILE_H * 0.6;
+          const colour = event.kind === 'stun' ? '#bfe8ff' : '#a8d8ff';
+          this.arc(from.x, from.y - lift, to.x, to.y - lift, colour, event.kind === 'stun' ? 260 : 200);
+          // A crackle at the receiving end, so the arc lands on something.
+          this.burst(to.x, to.y - lift, 5, colour, { speed: 1.6, size: 2, life: 200, gravity: 0 });
+          break;
+        }
+
+        case 'surface': {
+          // Earth thrown up as it breaks ground — the moment the defender
+          // finds out where it went, so it should be unmissable.
+          const at = tileToLogical(fxToFloat(event.x), fxToFloat(event.y), viewTeam);
+          this.burst(at.x, at.y, 22, '#7a5c3a', { speed: 3.4, size: 4, life: 520, shape: 'puff' });
+          this.burst(at.x, at.y, 10, '#4a3822', { speed: 2.2, size: 3, life: 620, shape: 'shard', gravity: 0.05 });
+          this.ring(at.x, at.y, 'rgba(140,110,70,0.9)', 30, 380);
+          this.addShake(3);
+          break;
+        }
+
         case 'shoot': {
           /*
            * Muzzle flash, thrown along the shooter's facing.
@@ -314,6 +394,12 @@ export class VfxSystem {
 
   update(deltaMs: number): void {
     const dt = Math.min(64, deltaMs);
+    for (const bolt of this.bolts) {
+      if (!bolt.active) continue;
+      bolt.life -= dt;
+      if (bolt.life <= 0) bolt.active = false;
+    }
+
     for (const particle of this.particles) {
       if (!particle.active) continue;
       particle.life -= dt;
@@ -346,6 +432,38 @@ export class VfxSystem {
   shakeOffset(): { x: number; y: number } {
     if (this.shake === 0) return { x: 0, y: 0 };
     return { x: this.spread(this.shake), y: this.spread(this.shake) };
+  }
+
+  /** Arcs are drawn under the figures so a bolt never hides a health bar. */
+  drawBolts(ctx: CanvasRenderingContext2D): void {
+    for (const bolt of this.bolts) {
+      if (!bolt.active) continue;
+      const t = bolt.life / bolt.maxLife;
+      const segments = bolt.jag.length + 1;
+      const dx = (bolt.x2 - bolt.x1) / segments;
+      const dy = (bolt.y2 - bolt.y1) / segments;
+      // Perpendicular, for the jag offsets.
+      const span = Math.hypot(bolt.x2 - bolt.x1, bolt.y2 - bolt.y1) || 1;
+      const nx = -(bolt.y2 - bolt.y1) / span;
+      const ny = (bolt.x2 - bolt.x1) / span;
+
+      // Drawn twice: a wide soft glow, then a hard white core over it.
+      for (const pass of [0, 1]) {
+        ctx.globalAlpha = (pass === 0 ? 0.35 : 0.95) * t;
+        ctx.strokeStyle = pass === 0 ? bolt.colour : '#ffffff';
+        ctx.lineWidth = (pass === 0 ? bolt.width * 3 : bolt.width) * (0.5 + t * 0.5);
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(bolt.x1, bolt.y1);
+        for (let i = 1; i < segments; i++) {
+          const offset = bolt.jag[i - 1] * t;
+          ctx.lineTo(bolt.x1 + dx * i + nx * offset, bolt.y1 + dy * i + ny * offset);
+        }
+        ctx.lineTo(bolt.x2, bolt.y2);
+        ctx.stroke();
+      }
+    }
+    ctx.globalAlpha = 1;
   }
 
   drawParticles(ctx: CanvasRenderingContext2D): void {

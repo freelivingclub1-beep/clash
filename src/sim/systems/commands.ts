@@ -76,7 +76,7 @@ function resolveDeploy(
   // Spells may be cast anywhere; everything else obeys territory rules.
   if (
     !isSpell &&
-    !canDeployAt(state.grid, command.team, command.tileX, command.tileY, player.deployRights, card.isFlying)
+    !canDeployAt(state.grid, command.team, command.tileX, command.tileY, player.deployRights, card.isFlying, card.deployAnywhere)
   ) {
     reject(state, player, 'illegal-placement');
     return;

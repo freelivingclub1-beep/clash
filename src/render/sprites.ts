@@ -35,6 +35,8 @@ import {
 
 export const SPRITE_SIZE = 96;
 export const POSE_COUNT = 6;
+/** Frames in the attack animation. Fewer than the walk cycle: a swing is quick. */
+export const STRIKE_POSE_COUNT = 5;
 
 export type Team = 0 | 1;
 
@@ -179,8 +181,11 @@ function drawBody(
 
     case 'golem': {
       // Stacked slabs with visible seams — reads as stone, not flesh.
-      roundRect(ctx, cx - 18, groundY - 18, 14, 18, 3, p.dark);
-      roundRect(ctx, cx + 4, groundY - 18, 14, 18, 3, p.dark);
+      // Short, heavy stride: a golem should lumber, not glide, and before this
+      // it did not move a single pixel between frames.
+      const legSwing = swing * 3;
+      roundRect(ctx, cx - 18 + legSwing, groundY - 18, 14, 18, 3, p.dark);
+      roundRect(ctx, cx + 4 - legSwing, groundY - 18, 14, 18, 3, p.dark);
       const top = groundY - 56;
       roundRect(ctx, cx - 20, top, 40, 40, 6, p.body);
       ctx.strokeStyle = shade(p.body, -0.4);
@@ -191,8 +196,8 @@ function drawBody(
       ctx.moveTo(cx - 6, top);
       ctx.lineTo(cx - 2, top + 40);
       ctx.stroke();
-      roundRect(ctx, cx - 30, top + 4, 10, 26, 3, shade(p.body, 0.1));
-      roundRect(ctx, cx + 20, top + 4, 10, 26, 3, shade(p.body, 0.1));
+      roundRect(ctx, cx - 30, top + 4 - swing * 3, 10, 26, 3, shade(p.body, 0.1));
+      roundRect(ctx, cx + 20, top + 4 + swing * 3, 10, 26, 3, shade(p.body, 0.1));
       // Glowing core.
       ellipse(ctx, cx, top + 22, 6, 6, p.light);
       return { headX: cx, headY: top - 6, headR: 12, handX: cx + 25, handY: top + 26, torsoX: cx - 20, torsoY: top, torsoW: 40, torsoH: 40 };
@@ -697,6 +702,15 @@ interface PoseParams {
   tint: string;
   spec: ModelSpec;
   isHero: boolean;
+  /**
+   * How far through a swing the figure is, 0..1, or 0 for "walking".
+   *
+   * Units used to attack by sliding a few pixels toward whatever they were
+   * hitting, which reads as a shove rather than a swing — the weapon never
+   * moved relative to the body, so every fight looked like two statues
+   * nudging each other. This drives the weapon arm.
+   */
+  strike: number;
 }
 
 function drawFigure(ctx: CanvasRenderingContext2D, pose: PoseParams): void {
@@ -704,7 +718,24 @@ function drawFigure(ctx: CanvasRenderingContext2D, pose: PoseParams): void {
   const cx = S / 2;
   const groundY = S - 8;
   const swing = Math.sin(pose.phase * Math.PI * 2);
-  const bob = Math.abs(Math.cos(pose.phase * Math.PI * 2)) * 2;
+  // A stride should visibly lift the body. Two pixels on a 96px sprite was
+  // close enough to nothing that the figures read as gliding.
+  const bob = Math.abs(Math.cos(pose.phase * Math.PI * 2)) * 4;
+
+  /*
+   * Swing arc: back fast, through slow, recover.
+   *
+   * `strike` runs 0..1 across the frames right after a blow lands. The first
+   * fifth is the wind-up (weapon back), the rest is the follow-through, which
+   * is what gives the motion a direction rather than a wobble.
+   */
+  const strikeAngle =
+    pose.strike <= 0
+      ? 0
+      : pose.strike < 0.2
+        ? -1.1 * (pose.strike / 0.2)
+        : -1.1 + 2.5 * ((pose.strike - 0.2) / 0.8);
+  const lean = pose.strike > 0 ? Math.sin(pose.strike * Math.PI) * 3 : 0;
 
   const palette: Palette = {
     body: pose.tint,
@@ -726,14 +757,28 @@ function drawFigure(ctx: CanvasRenderingContext2D, pose: PoseParams): void {
   ctx.translate(-cx, -groundY);
 
   const isStatic = pose.spec.body === 'structure';
-  const rig = drawBody(ctx, pose.spec.body, palette, cx, groundY - (isStatic ? 0 : bob), swing);
+  // Leaning into the blow moves the whole body, not just the arm.
+  const rig = drawBody(ctx, pose.spec.body, palette, cx + lean, groundY - (isStatic ? 0 : bob), swing);
 
   // Accessories that sit behind the figure go first.
   if (pose.spec.accessory === 'cape' || pose.spec.accessory === 'banner') {
     drawAccessory(ctx, pose.spec.accessory, palette, rig, swing);
   }
   drawHead(ctx, pose.spec.head, palette, rig);
+
+  /*
+   * The weapon is rotated about the hand rather than redrawn per pose.
+   *
+   * One transform animates every weapon in the game — a sword arcs, a hammer
+   * comes over the top, a bow tips down — instead of thirteen bespoke attack
+   * drawings that would all have to be kept in step with their idle versions.
+   */
+  ctx.save();
+  ctx.translate(rig.handX, rig.handY);
+  ctx.rotate(strikeAngle);
+  ctx.translate(-rig.handX, -rig.handY);
   drawWeapon(ctx, pose.spec.weapon, palette, rig, swing);
+  ctx.restore();
   if (pose.spec.accessory !== 'cape' && pose.spec.accessory !== 'banner') {
     drawAccessory(ctx, pose.spec.accessory, palette, rig, swing);
   }
@@ -766,6 +811,7 @@ function drawFigure(ctx: CanvasRenderingContext2D, pose: PoseParams): void {
 type Cell = HTMLCanvasElement;
 
 const generatedCache = new Map<string, Cell[]>();
+const strikeCache = new Map<string, Cell[]>();
 const imageCache = new Map<string, HTMLImageElement | null>();
 
 function makeCell(): { canvas: Cell; ctx: CanvasRenderingContext2D } {
@@ -788,6 +834,32 @@ function generatePoses(card: CardDefinition, team: Team): Cell[] {
       tint: card.tint,
       spec,
       isHero: card.isHero,
+      strike: 0,
+    });
+    cells.push(canvas);
+  }
+  return cells;
+}
+
+/**
+ * The swing, rasterised once per card like the walk cycle.
+ *
+ * Held in its own cache rather than appended to the walk poses so the two can
+ * be indexed independently — a unit mid-swing is still standing on whichever
+ * foot it was standing on.
+ */
+function generateStrikePoses(card: CardDefinition, team: Team): Cell[] {
+  const spec = modelFor(card);
+  const cells: Cell[] = [];
+  for (let i = 0; i < STRIKE_POSE_COUNT; i++) {
+    const { canvas, ctx } = makeCell();
+    drawFigure(ctx, {
+      phase: 0,
+      team,
+      tint: card.tint,
+      spec,
+      isHero: card.isHero,
+      strike: (i + 0.5) / STRIKE_POSE_COUNT,
     });
     cells.push(canvas);
   }
@@ -829,13 +901,29 @@ export interface DrawnSprite {
  * `phase` is the walk-cycle position in 0..1; callers derive it from the
  * simulation tick so animation speed follows movement speed.
  */
-export function spriteFor(card: CardDefinition, team: Team, phase: number): DrawnSprite {
+export function spriteFor(
+  card: CardDefinition,
+  team: Team,
+  phase: number,
+  strike = 0,
+): DrawnSprite {
   const external = externalImage(card);
   if (external) {
     return { source: external, width: external.width, height: external.height };
   }
 
   const key = `${card.id}|${team}`;
+
+  if (strike > 0) {
+    let poses = strikeCache.get(key);
+    if (!poses) {
+      poses = generateStrikePoses(card, team);
+      strikeCache.set(key, poses);
+    }
+    const index = Math.min(STRIKE_POSE_COUNT - 1, Math.max(0, Math.floor(strike * STRIKE_POSE_COUNT)));
+    return { source: poses[index], width: SPRITE_SIZE, height: SPRITE_SIZE };
+  }
+
   let poses = generatedCache.get(key);
   if (!poses) {
     poses = generatePoses(card, team);
@@ -849,6 +937,7 @@ export function spriteFor(card: CardDefinition, team: Team, phase: number): Draw
 /** Drop every cached bitmap. Used when a runtime card's art changes. */
 export function clearSpriteCache(): void {
   generatedCache.clear();
+  strikeCache.clear();
   imageCache.clear();
   portraitCache.clear();
 }
@@ -856,7 +945,7 @@ export function clearSpriteCache(): void {
 /** A standalone portrait for the deck builder and Card Maker preview. */
 export function portraitFor(card: CardDefinition, team: Team = 0): HTMLCanvasElement {
   const { canvas, ctx } = makeCell();
-  drawFigure(ctx, { phase: 0, team, tint: card.tint, spec: modelFor(card), isHero: card.isHero });
+  drawFigure(ctx, { phase: 0, team, tint: card.tint, spec: modelFor(card), isHero: card.isHero, strike: 0 });
   return canvas;
 }
 

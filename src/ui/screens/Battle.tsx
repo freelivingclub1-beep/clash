@@ -191,6 +191,7 @@ export function Battle({ config, localTeam, opponentName, onExit }: BattleProps)
               tileY,
               runner.state.players[localTeam].deployRights,
               card.isFlying,
+              card.deployAnywhere,
             );
 
       const drag: DragState = {
@@ -200,6 +201,7 @@ export function Battle({ config, localTeam, opponentName, onExit }: BattleProps)
         legal,
         cardId,
         flying: card.isFlying,
+        anywhere: card.deployAnywhere,
       };
       renderer.setDrag(drag);
     },

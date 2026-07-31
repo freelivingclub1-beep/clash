@@ -205,6 +205,16 @@ export const MODELS: Record<string, ModelSpec> = {
   beaconSpire: model('structure', 'crown', 'lantern', 'halo', 1.0),
   standardBearer: model('brute', 'helm', 'spear', 'banner', 1.15),
   seraphOfDusk: model('winged', 'crown', 'bow', 'halo', 1.05),
+
+  // --- spectacle wave: cards built around what they look like --------------
+  stormcaller: model('humanoid', 'wizardHat', 'staff', 'halo', 0.95),
+  delver: model('humanoid', 'helm', 'drill', 'none', 0.85),
+  arcLance: model('humanoid', 'visor', 'staff', 'shield', 0.95),
+  emberJack: model('humanoid', 'crest', 'bomb', 'cape', 0.85),
+  skyLantern: model('orb', 'skull', 'bomb', 'wings', 1.1),
+  pyreDrake: model('winged', 'visor', 'staff', 'halo', 1.0),
+  gloomArcher: model('humanoid', 'skull', 'bow', 'cape', 0.92),
+  boltPair: model('mech', 'crest', 'staff', 'backpack', 0.75),
 };
 
 export function modelSpec(modelId: string, fallback: ModelSpec): ModelSpec {

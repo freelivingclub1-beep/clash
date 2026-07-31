@@ -167,6 +167,71 @@ export function applyDamageAtPoint(
   }
 
   const radiusSq = Math.round((radius * radius) / FX_ONE);
+
+  /*
+   * A piercing line strikes everything between the attacker and the impact
+   * point, not a disc around it.
+   *
+   * `PiercingLine` was declared in the schema and implemented nowhere, exactly
+   * as `ConeSplash` used to be — cards could name it and the Card Maker would
+   * offer it, and in play it behaved as an ordinary blast. It is the shape that
+   * makes a shot punch through a whole rank rather than clip the front of one,
+   * and it is the reason lining a defence up behind a tank is a mistake.
+   */
+  if (card.damageType === 'PiercingLine' && attacker) {
+    const lineX = x - attacker.x;
+    const lineY = y - attacker.y;
+    const lineLenSq = fxLenSq(lineX, lineY);
+    /*
+     * The beam does not stop at whatever it was aiming at — it carries on to
+     * the card's full reach.
+     *
+     * Stopping at the target made "piercing" mean "hits the things queued in
+     * front of the thing I shot", which is backwards: a defence stacked
+     * *behind* the front body is exactly what a piercing shot is supposed to
+     * punish. The limit is expressed in squared terms so no square root is
+     * needed to compare a fraction of the line against a distance in tiles.
+     */
+    const alongLimitSq =
+      lineLenSq > 0 ? (card.attackRange * card.attackRange * FX_ONE) / lineLenSq : 0;
+    for (const entity of state.entities) {
+      if (entity.team !== foe || !isTargetable(entity)) continue;
+      if (!canTarget(card.targetPriority, entity) && entity.id !== primaryId) continue;
+
+      // Project onto the shot line, clamped to the segment, then measure how
+      // far off it the body sits.
+      const toX = entity.x - attacker.x;
+      const toY = entity.y - attacker.y;
+      /*
+       * Both sides of this ratio have to be in the same units.
+       *
+       * `fxLenSq` returns an Fx-*scaled* square, while a raw product of two Fx
+       * values is scaled by FX_ONE twice. Dividing one by the other without
+       * correcting for that put `along` at 65536 instead of 1, so every body
+       * failed the 0..1 segment test and the beam hit nothing at all.
+       */
+      const dot = (toX * lineX + toY * lineY) / FX_ONE;
+      const along = lineLenSq > 0 ? dot / lineLenSq : 0;
+      /*
+       * The intended victim is never skipped, whatever the arithmetic says.
+       *
+       * It sits at the far end of the line, so `along` lands on 1 and a strict
+       * bound drops it to floating-point noise — the shot would pierce
+       * everything on the way to its target and then miss the target.
+       */
+      if (entity.id !== primaryId && (along < 0 || along * along > alongLimitSq)) continue;
+      const nearX = attacker.x + Math.round(lineX * along);
+      const nearY = attacker.y + Math.round(lineY * along);
+      if (fxLenSq(entity.x - nearX, entity.y - nearY) > radiusSq) continue;
+
+      applyDamage(state, entity, damageAgainst(entity, damage, card), attacker);
+      if (card.onHitStatus !== 'None') applyStatus(card, entity, statusTicks);
+      if (entity.id === primaryId) passive?.onHit?.(state, attacker, entity, card.passiveMagnitude);
+    }
+    state.events.push({ type: 'hit', x, y, damage, splash: true });
+    return;
+  }
+
   // A cone strikes a forward half-plane rather than a full circle. Previously
   // ConeSplash was handled identically to AreaSplash, so the damage type
   // existed on cards and in the Card Maker but changed nothing in play.
@@ -189,6 +254,17 @@ export function applyDamageAtPoint(
     }
     applyDamage(state, entity, damageAgainst(entity, damage, card), attacker);
     if (card.onHitStatus !== 'None') applyStatus(card, entity, statusTicks);
+    /*
+     * A stun spell earths itself into everything it caught.
+     *
+     * A Zap over four bodies used to be one orange ring and four health bars
+     * quietly shortening. The arcs are what say *these* are the units that got
+     * hit, and they are why the effect reads as electricity rather than as an
+     * explosion that happens to stun.
+     */
+    if (card.onHitStatus === 'ElectroReset' || card.onHitStatus === 'Stun') {
+      state.events.push({ type: 'arc', team, x, y, toX: entity.x, toY: entity.y, kind: 'stun' });
+    }
     // The passive fires once, on the intended target, not once per unit caught
     // in the splash — otherwise a chain passive squared itself on a swarm.
     if (attacker && entity.id === primaryId) {

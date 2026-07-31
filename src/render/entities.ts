@@ -18,12 +18,15 @@ import { tryGetCard } from '@cards/registry';
 import type { CardDefinition } from '@cards/schema';
 import { fxToFloat } from '@sim/math/fixed';
 import { TOWER_LAYOUTS } from '@sim/nav/grid';
-import { DAMAGE_RAMP_STACK_CAP, PROJECTILE_SPEED } from '@sim/constants';
+import { DAMAGE_RAMP_STACK_CAP, PROJECTILE_SPEED, TICK_HZ } from '@sim/constants';
 import type { Entity, MatchState, Team } from '@sim/types';
 import type { MatchRunner } from '@game/match';
 import { TILE_W, TILE_H, tileToLogical } from './camera';
 import { modelFor, spriteFor } from './sprites';
 import { texturePattern } from './textures';
+
+/** Ticks a swing animation plays for, regardless of the card's reload. */
+const STRIKE_TICKS = 8;
 
 const TEAM_COLOURS: Record<Team, { primary: string; dark: string }> = {
   0: { primary: '#4a9eff', dark: '#1b4f8a' },
@@ -73,6 +76,14 @@ function drawTroop(
 ): void {
   const card = tryGetCard(entity.cardId);
   if (!card) return;
+
+  /*
+   * A tunneller is genuinely absent while it digs — no figure, no shadow, no
+   * spawn ring. Drawing anything at all, even the scale-up other units get,
+   * would give away the one thing the card is paying for.
+   */
+  if (card.passiveId === 'tunnel' && entity.deployTimer > 0) return;
+
   const radius = Math.max(10, fxToFloat(entity.radius) * TILE_W);
 
   // Flying units are lifted off the ground with their shadow left behind, so
@@ -95,18 +106,31 @@ function drawTroop(
 
   if (entity.invisibleTicks > 0) ctx.globalAlpha = 0.35;
 
-  const sprite = spriteFor(card, entity.team, walkPhase(entity, tick));
+  /*
+   * Strike phase, from how long ago the last blow landed.
+   *
+   * `attackCooldown` is set to the full reload the instant a blow lands and
+   * counts down, so ticks-since-swing is the difference. The animation runs
+   * over the first `STRIKE_TICKS` of that, whatever the card's reload — a
+   * Mini P.E.K.K.A. with a 1.6s cooldown should not swing in slow motion.
+   */
+  const reload = Math.max(1, Math.round(card.hitSpeed * TICK_HZ));
+  const sinceSwing = entity.windupDone ? reload - entity.attackCooldown : reload;
+  const strike =
+    entity.attackCooldown > 0 && sinceSwing >= 0 && sinceSwing < STRIKE_TICKS
+      ? Math.min(0.999, (sinceSwing + 0.5) / STRIKE_TICKS)
+      : 0;
+
+  const sprite = spriteFor(card, entity.team, walkPhase(entity, tick), strike);
   // Sprites are authored feet-at-the-bottom, so the draw box is anchored to
   // the entity's ground position rather than centred on it.
   const drawHeight = radius * 4.2 * spawnScale;
   const drawWidth = drawHeight * (sprite.width / sprite.height);
   const footY = screenY - lift;
 
-  // Attack lunge: for a few ticks after a swing the figure is shoved toward
-  // whatever it hit, so a melee exchange reads as an exchange rather than as
-  // two idle figures and a silently draining health bar.
-  const sinceSwing = entity.attackCooldown;
-  const lungeStrength = sinceSwing > 0 && entity.windupDone ? Math.min(1, sinceSwing / 6) : 0;
+  // The lunge rides on top of the swing rather than replacing it: the arm
+  // arcs, and the body follows it a few pixels toward the target.
+  const lungeStrength = strike > 0 ? Math.sin(strike * Math.PI) : 0;
   const facingLength = Math.hypot(fxToFloat(entity.faceX), fxToFloat(entity.faceY)) || 1;
   const lungeX = (fxToFloat(entity.faceX) / facingLength) * lungeStrength * radius * 0.45;
   const lungeY = (fxToFloat(entity.faceY) / facingLength) * lungeStrength * radius * 0.25;

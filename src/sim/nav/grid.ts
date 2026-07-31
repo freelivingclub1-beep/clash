@@ -184,11 +184,18 @@ export function canDeployAt(
   ty: number,
   rights: DeployRights,
   flying: boolean,
+  anywhere = false,
 ): boolean {
   if (!inBounds(tx, ty)) return false;
+  /*
+   * A tunneller ignores territory, but not terrain: it still cannot surface
+   * inside the river or underneath a standing building.
+   */
   // Nothing may be dropped onto water or onto a standing structure.
   if (!isWalkable(grid, tx, ty, false)) return false;
   if (flying && isRiverTile(grid, tx, ty)) return false;
+
+  if (anywhere) return true;
 
   const lane = laneForX(tx);
   if (team === BLUE) {
