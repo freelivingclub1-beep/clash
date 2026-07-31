@@ -117,6 +117,7 @@ function blankEntity(id: number, team: Team, kind: Entity['kind']): Entity {
     faceY: team === 0 ? FX_ONE : -FX_ONE,
     radius: fx(0.4),
     flying: false,
+    ignoresTerrain: false,
     mass: 20,
     hp: 1,
     maxHp: 1,
@@ -383,11 +384,23 @@ export function spawnJitter(rng: Rng): Fx {
  * deaths are picked up by the deaths system so death effects resolve in a
  * single, ordered place.
  */
+export interface DamageOptions {
+  /**
+   * Suppress the victim's reactive passives for this blow.
+   *
+   * Needed by passives that themselves deal damage to another entity —
+   * damage_share in particular, where two linked units would otherwise bounce
+   * a share back and forth forever.
+   */
+  passives?: boolean;
+}
+
 export function applyDamage(
   state: MatchState,
   target: Entity,
   amount: number,
   attacker?: Entity,
+  options: DamageOptions = {},
 ): number {
   if (!target.alive || amount <= 0) return 0;
 
@@ -412,16 +425,19 @@ export function applyDamage(
     return dealt;
   }
 
-  // Reactive passives — reflect, parry — fire only on a survivor, and only
-  // when the damage came from an identifiable attacker. Spells and decay have
-  // nobody to answer, which is deliberate: they are the counterplay.
-  if (dealt > 0 && attacker) {
-    const hooks = passiveHooks(resolveStats(target.cardId, target.level, target.evolved).card.passiveId);
-    if (hooks?.onDamaged) {
-      const magnitude = resolveStats(target.cardId, target.level, target.evolved).card
-        .passiveMagnitude;
-      hooks.onDamaged(state, target, attacker, dealt, magnitude);
-    }
+  // Reactive passives fire on any surviving victim, whether or not the blow
+  // came from an identifiable attacker: reflect and parry need one and check
+  // for it themselves, but self-replication and damage sharing must trigger
+  // on spell damage too.
+  if (dealt > 0 && options.passives !== false) {
+    const stats = resolveStats(target.cardId, target.level, target.evolved);
+    passiveHooks(stats.card.passiveId)?.onDamaged?.(
+      state,
+      target,
+      attacker,
+      dealt,
+      stats.card.passiveMagnitude,
+    );
   }
   return dealt;
 }

@@ -106,6 +106,15 @@ const assetsSchema = z.object({
     .string()
     .regex(/^#[0-9a-fA-F]{6}$/)
     .default('#c8d4e2'),
+  /**
+   * Names a body plan in the model registry (`@render/models`).
+   *
+   * Explicit rather than derived from stats: deriving it meant every melee
+   * tank drew the same figure, so a board full of different cards read as one
+   * repeated unit. A test asserts no two playable cards share a model.
+   * Empty falls back to a stat-derived default.
+   */
+  modelId: z.string().default(''),
 });
 
 /** C — entity attributes & health. */

@@ -270,6 +270,234 @@ register('damage_immunity', {
 });
 
 // ---------------------------------------------------------------------------
+// Conditional damage
+// ---------------------------------------------------------------------------
+
+/** Air Superiority — extra damage against flying targets only. */
+register('air_superiority', {
+  onHit: (state, self, victim, magnitude) => {
+    if (!victim.flying) return;
+    const stats = resolveStats(self.cardId, self.level, self.evolved);
+    applyDamage(state, victim, Math.round(stats.damage * magnitude), self);
+  },
+});
+
+/** Shield Breaker — extra damage while the victim still has a shield up. */
+register('shield_breaker', {
+  onHit: (state, self, victim, magnitude) => {
+    if (victim.shield <= 0) return;
+    const stats = resolveStats(self.cardId, self.level, self.evolved);
+    applyDamage(state, victim, Math.round(stats.damage * magnitude), self);
+  },
+});
+
+/**
+ * Suicide Charge — detonates on contact, then dies.
+ *
+ * The blast is deliberately area damage on the *victim's* position rather than
+ * the carrier's: the carrier has already closed to melee, and centring on the
+ * target is what lets it punish a tightly packed defence.
+ */
+register('suicide_charge', {
+  onHit: (state, self, victim, magnitude) => {
+    const stats = resolveStats(self.cardId, self.level, self.evolved);
+    const blast = Math.round(stats.damage * magnitude);
+    for (const enemy of enemiesInRadius(state, victim, fx(2.0))) {
+      applyDamage(state, enemy, blast, self);
+    }
+    // Consumed by its own attack — no death effect credit, no lingering body.
+    self.hp = 0;
+    self.alive = false;
+    state.needsCompaction = true;
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Buffs
+// ---------------------------------------------------------------------------
+
+/**
+ * Damage Aura — nearby allies fight faster.
+ *
+ * Implemented by granting rage rather than by adding a parallel damage
+ * multiplier: rage already shortens attack cooldowns, already ticks down, and
+ * already renders a tell. A second mechanism would duplicate all three.
+ */
+register('aura_damage', {
+  onTick: (state, self, magnitude) => {
+    for (const ally of alliesInRadius(state, self, fx(magnitude))) {
+      if (ally.kind === 'tower' || ally.kind === 'building') continue;
+      // Two ticks, refreshed continuously, so it lapses on leaving the aura.
+      ally.rageTicks = Math.max(ally.rageTicks, 2);
+    }
+  },
+});
+
+/** Pack Bond — stronger while it has company, useless alone. */
+register('pack_bond', {
+  onTick: (state, self, magnitude) => {
+    const needed = Math.max(1, Math.round(magnitude));
+    let allies = 0;
+    for (const ally of alliesInRadius(state, self, fx(3.0))) {
+      if (ally.kind === 'troop') allies++;
+      if (allies >= needed) break;
+    }
+    if (allies >= needed) self.rageTicks = Math.max(self.rageTicks, 2);
+  },
+});
+
+/** Growth — maximum health climbs the longer it stays alive. */
+register('growth', {
+  onTick: (state, self, magnitude) => {
+    if (state.tick % TICK_HZ !== 0) return;
+    // Capped at double the starting pool so a stalled match cannot produce an
+    // unkillable unit.
+    const cap = self.maxHp * 2;
+    const gain = Math.round(magnitude);
+    if (self.maxHp >= cap) return;
+    self.maxHp += gain;
+    self.hp += gain;
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Evasion and protection
+// ---------------------------------------------------------------------------
+
+/**
+ * Burrow — untargetable while travelling, exposed while attacking.
+ *
+ * Reuses `invisibleTicks`, which `isTargetable` already honours, so every
+ * targeting path picks this up without modification. Refreshed to 2 ticks so
+ * it drops the instant the unit stops to swing.
+ */
+register('burrow', {
+  onTick: (_state, self) => {
+    // Movement alone is the tell. Gating on "has no target" never fired,
+    // because a marching unit always holds the enemy tower as its objective;
+    // what actually distinguishes travelling from fighting is that a unit
+    // stops moving once it is in range to swing.
+    const moving = self.stepX !== 0 || self.stepY !== 0;
+    if (moving) self.invisibleTicks = Math.max(self.invisibleTicks, 2);
+  },
+});
+
+/** Frontal Armour — shrugs off damage from whatever it is facing. */
+register('frontal_armor', {
+  onDamaged: (_state, self, attacker, amount, magnitude) => {
+    if (!attacker) return;
+    // Dot product of the facing vector against the attacker's bearing: a
+    // positive result means the blow landed on the shield side.
+    const toAttackerX = attacker.x - self.x;
+    const toAttackerY = attacker.y - self.y;
+    const facing = self.faceX * toAttackerX + self.faceY * toAttackerY;
+    if (facing <= 0) return;
+    self.hp = Math.min(self.maxHp, self.hp + Math.round(amount * magnitude));
+  },
+});
+
+/** Damage Share — the nearest ally takes part of every blow. */
+register('damage_share', {
+  onDamaged: (state, self, _attacker, amount, magnitude) => {
+    const nearby = alliesInRadius(state, self, fx(5.0)).filter(
+      (ally) => ally.kind === 'troop' && ally.alive,
+    );
+    if (nearby.length === 0) return;
+
+    let closest = nearby[0];
+    let bestDist = fxLenSq(closest.x - self.x, closest.y - self.y);
+    for (const ally of nearby) {
+      const dist = fxLenSq(ally.x - self.x, ally.y - self.y);
+      if (dist < bestDist) {
+        closest = ally;
+        bestDist = dist;
+      }
+    }
+
+    const shared = Math.round(amount * magnitude);
+    if (shared <= 0) return;
+    // Refund the share from self before passing it on, so the total damage
+    // dealt across both bodies is unchanged — this redistributes, not reduces.
+    self.hp = Math.min(self.maxHp, self.hp + shared);
+    // Suppress the ally's own reactive passives: two linked keepers would
+    // otherwise trade the same share back and forth without end.
+    applyDamage(state, closest, shared, undefined, { passives: false });
+  },
+});
+
+/** Self Replicate — one weakened copy, the first time it is hurt. */
+register('self_replicate', {
+  onSpawn: (_state, self) => {
+    self.passiveCharges = 1;
+  },
+  onDamaged: (state, self, _attacker, _amount, magnitude) => {
+    if (self.passiveCharges <= 0) return;
+    self.passiveCharges = 0;
+
+    const copy = spawnTroop(state, self.cardId, self.level, self.evolved, self.team, self.x + fx(0.7), self.y, {
+      skipDeployDelay: true,
+    });
+    // The copy must not replicate in turn, or one card fills the arena.
+    copy.passiveCharges = 0;
+    copy.maxHp = Math.max(1, Math.round(copy.maxHp * magnitude));
+    copy.hp = copy.maxHp;
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Positioning
+// ---------------------------------------------------------------------------
+
+/** Blink Strike — arrives already on top of the nearest enemy. */
+register('blink_strike', {
+  onSpawn: (state, self, magnitude) => {
+    const target = enemiesInRadius(state, self, fx(magnitude))
+      .filter((enemy) => enemy.kind !== 'tower')
+      .sort((a, b) => {
+        const da = fxLenSq(a.x - self.x, a.y - self.y);
+        const db = fxLenSq(b.x - self.x, b.y - self.y);
+        return da === db ? a.id - b.id : da - db;
+      })[0];
+    if (!target) return;
+    self.x = target.x;
+    self.y = target.y + (self.team === 0 ? -fx(0.8) : fx(0.8));
+    self.targetId = target.id;
+  },
+});
+
+/** Spawner — periodically produces the unit named in `deathEffectParam`. */
+register('spawner', {
+  onTick: (state, self, magnitude) => {
+    const period = Math.max(1, Math.round(magnitude * TICK_HZ));
+    if (self.passiveTimer > 0) {
+      self.passiveTimer--;
+      return;
+    }
+    self.passiveTimer = period;
+
+    const stats = resolveStats(self.cardId, self.level, self.evolved);
+    const spawnId = stats.card.deathEffectParam;
+    if (!spawnId) return;
+    spawnTroop(state, spawnId, self.level, false, self.team, self.x, self.y + fx(0.8), {
+      skipDeployDelay: true,
+    });
+  },
+});
+
+/**
+ * Terrain Walk — crosses the river without using a bridge.
+ *
+ * The only passive needing engine support: the movement system consults
+ * `ignoresTerrain` alongside `flying` when testing walkability. Set here on
+ * spawn rather than read from the card in the hot loop.
+ */
+register('terrain_walk', {
+  onSpawn: (_state, self) => {
+    self.ignoresTerrain = true;
+  },
+});
+
+// ---------------------------------------------------------------------------
 
 export function passiveHooks(passiveId: string): PassiveHooks | undefined {
   if (!passiveId || passiveId === 'none') return undefined;

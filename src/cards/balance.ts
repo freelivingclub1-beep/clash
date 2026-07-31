@@ -181,6 +181,46 @@ export const PASSIVE_EPP_COST: Record<string, number> = {
   siege_bonus: 210,
   /** Leaves a damaging zone where it dies. */
   death_zone: 200,
+
+  // --- second wave -------------------------------------------------------
+  /** Bonus damage against flying targets. Narrow, so cheap. */
+  air_superiority: 150,
+  /** Bonus damage against shielded targets. Narrower still. */
+  shield_breaker: 130,
+  /** Detonates on its target, destroying itself. Huge burst, one use. */
+  suicide_charge: 280,
+  /** Enrages nearby allies while alive. */
+  aura_damage: 270,
+  /** Stronger while allies are close. Conditional, so cheaper than an aura. */
+  pack_bond: 170,
+  /** Maximum health climbs the longer it survives. */
+  growth: 240,
+  /** Untargetable while moving; surfaces only to attack. */
+  burrow: 310,
+  /**
+   * Periodically spawns units for free.
+   *
+   * Priced far above the other passives on purpose: a spawner's real cost is
+   * the aggregate value of everything it emits, not the mechanic itself. A
+   * nest producing a Skeleton every 4s across a 40s life yields ten bodies —
+   * roughly 4900 EPP of raw stats — so the spawner card itself must be
+   * correspondingly weak or it is simply two cards for one aether cost.
+   *
+   * This flat figure is calibrated to that emission rate. A spawner emitting
+   * something larger, or living longer, needs `extraAbilityEpp` on top rather
+   * than reusing this number unchanged.
+   */
+  spawner: 2600,
+  /** Reduced damage from attackers in front of it. */
+  frontal_armor: 220,
+  /** Splits incoming damage with the nearest ally. */
+  damage_share: 230,
+  /** Spawns a weakened copy of itself the first time it is hurt. */
+  self_replicate: 290,
+  /** Teleports next to the nearest enemy on deployment. */
+  blink_strike: 200,
+  /** Walks over the river, ignoring bridges entirely. */
+  terrain_walk: 260,
 };
 
 export type PassiveId = keyof typeof PASSIVE_EPP_COST;

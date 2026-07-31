@@ -43,6 +43,8 @@ export interface Entity {
   faceY: Fx;
   radius: Fx;
   flying: boolean;
+  /** Set by the terrain_walk passive: crosses the river without a bridge. */
+  ignoresTerrain: boolean;
   mass: number;
 
   // --- health --------------------------------------------------------------

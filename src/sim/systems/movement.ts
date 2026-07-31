@@ -194,8 +194,11 @@ function flowFieldStep(state: MatchState, entity: Entity, structure: Entity): [F
     return [fxDiv(dx, distance), fxDiv(dy, distance)];
   }
 
-  const key = `tower:${structure.towerIndex}:${entity.flying ? 'air' : 'ground'}`;
-  const field = state.flowFields.get(key, goalCellsFor(structure.towerIndex), entity.flying);
+  // A terrain_walk unit needs the river-ignoring field too, or it would path
+  // to a bridge despite being able to swim straight across.
+  const ignoresRiver = entity.flying || entity.ignoresTerrain;
+  const key = `tower:${structure.towerIndex}:${ignoresRiver ? 'air' : 'ground'}`;
+  const field = state.flowFields.get(key, goalCellsFor(structure.towerIndex), ignoresRiver);
   const [sx, sy] = flowDirection(field, tileOf(entity.x), tileOf(entity.y));
 
   if (sx === 0 && sy === 0) {
@@ -230,7 +233,10 @@ export function movement(state: MatchState): void {
     if (nextY < 0) nextY = 0;
     if (nextY > MAX_Y) nextY = MAX_Y;
 
-    if (!entity.flying) {
+    // terrain_walk units are ground units for collision and targeting, but
+    // the river does not stop them — so the mask check is skipped, not the
+    // whole movement path.
+    if (!entity.flying && !entity.ignoresTerrain) {
       // Resolve each axis separately so a unit sliding along a wall or a
       // bridge edge keeps its remaining momentum instead of stopping dead.
       const currentTileX = tileOf(entity.x);

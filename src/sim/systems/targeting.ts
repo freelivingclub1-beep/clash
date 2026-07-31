@@ -31,9 +31,19 @@ function currentTargetStillValid(state: MatchState, entity: Entity, loseRangeSq:
   const priority = resolveStats(entity.cardId, entity.level, entity.evolved).card.targetPriority;
   if (!canTarget(priority, target)) return false;
 
-  // Towers never chase; they simply drop anything that leaves their reach.
-  const rangeSq = entity.kind === 'tower' || entity.kind === 'building' ? loseRangeSq : loseRangeSq;
-  return fxLenSq(target.x - entity.x, target.y - entity.y) <= rangeSq;
+  /*
+   * A march objective is exempt from the sight-range check.
+   *
+   * Without this a unit drops its objective tower every tick — the tower is
+   * far away, which is the entire reason it is walking toward it — and only
+   * re-acquires on the every-third-tick stagger. In between it has no target,
+   * so steering produces no direction and it does not move. The net effect was
+   * that every unit in the game travelled at roughly a third of its stated
+   * speed, in a visible stutter. Only *engaged* targets should be droppable.
+   */
+  if (target.kind === 'tower' && target.towerIndex === entity.goalTowerIndex) return true;
+
+  return fxLenSq(target.x - entity.x, target.y - entity.y) <= loseRangeSq;
 }
 
 /**
