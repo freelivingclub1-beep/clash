@@ -131,12 +131,53 @@ function drawTroop(
     ctx.stroke();
   }
 
+  /*
+   * Armour is worn, not orbited.
+   *
+   * The tell used to be a blue ellipse around the whole figure, which read as
+   * a magic bubble and — on a three-body card where each unit tracks its own
+   * plate — was hard to attribute to a particular body in a scrum. A plate
+   * strapped across the chest sits *on* the unit, so at a glance you can see
+   * which of the pack still has armour and which is down to bare health.
+   *
+   * It comes off in `VfxSystem`, which turns the `shieldBreak` event into
+   * shards flung from this same spot.
+   */
   if (entity.shield > 0) {
-    ctx.strokeStyle = 'rgba(159,216,255,0.9)';
-    ctx.lineWidth = 3;
+    /*
+     * Half-height on the body, not up by the head.
+     *
+     * One constant has to suit a humanoid chest and a quadruped's back, and
+     * the first attempt at 0.62 sat above both — the plates read as floating
+     * over the pack rather than strapped to it. Mid-body works for either
+     * silhouette.
+     */
+    const plateWidth = drawWidth * 0.48;
+    const plateHeight = Math.max(3, drawHeight * 0.12);
+    const plateX = screenX - plateWidth / 2;
+    const plateY = footY - drawHeight * 0.5;
+
+    const sheen = ctx.createLinearGradient(plateX, plateY, plateX, plateY + plateHeight);
+    sheen.addColorStop(0, '#eaf4ff');
+    sheen.addColorStop(0.45, '#9fc4e6');
+    sheen.addColorStop(1, '#5c7d9c');
+    ctx.fillStyle = sheen;
     ctx.beginPath();
-    ctx.ellipse(screenX, footY - drawHeight / 2, drawWidth * 0.55, drawHeight * 0.55, 0, 0, Math.PI * 2);
+    ctx.roundRect(plateX, plateY, plateWidth, plateHeight, plateHeight * 0.35);
+    ctx.fill();
+
+    ctx.strokeStyle = 'rgba(20,32,46,0.85)';
+    ctx.lineWidth = 1;
     ctx.stroke();
+
+    // Two rivets, so the plate reads as bolted metal rather than a bar.
+    const rivet = Math.max(1, plateHeight * 0.16);
+    ctx.fillStyle = 'rgba(30,44,60,0.9)';
+    for (const side of [0.22, 0.78]) {
+      ctx.beginPath();
+      ctx.arc(plateX + plateWidth * side, plateY + plateHeight / 2, rivet, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 
   // Status tells, drawn over the figure so they are never hidden by it.

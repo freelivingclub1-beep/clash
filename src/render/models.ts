@@ -180,6 +180,17 @@ export const MODELS: Record<string, ModelSpec> = {
   thornmail: model('golem', 'visor', 'sword', 'shield', 1.1),
   headsman: model('brute', 'hood', 'scythe', 'none', 1.05),
   duelist: model('humanoid', 'mask', 'dagger', 'banner', 0.9),
+
+  // --- depth wave: support, structures, tanks, champions --------------------
+  shieldChaplain: model('humanoid', 'hood', 'staff', 'shield', 0.95),
+  wardstone: model('structure', 'none', 'lantern', 'halo', 0.95),
+  barbedFence: model('structure', 'none', 'spear', 'shield', 0.9),
+  rampartOx: model('brute', 'crest', 'hammer', 'shield', 1.35),
+  graveTitan: model('golem', 'skull', 'scythe', 'cape', 1.4),
+  halberdier: model('humanoid', 'visor', 'spear', 'banner', 1.0),
+  tunnelRat: model('insect', 'visor', 'drill', 'none', 0.62),
+  wardenMatriarch: model('humanoid', 'crown', 'hammer', 'halo', 1.05),
+  rookmaster: model('humanoid', 'crown', 'scythe', 'backpack', 1.0),
 };
 
 export function modelSpec(modelId: string, fallback: ModelSpec): ModelSpec {

@@ -239,6 +239,27 @@ export class VfxSystem {
           break;
         }
 
+        case 'shieldBreak': {
+          /*
+           * The plate comes off.
+           *
+           * Short-lived and heavy on purpose: these are metal fragments, so
+           * they should fall fast and be gone. Debris that hangs around after
+           * the moment it belongs to turns into litter you have to read past
+           * during the next exchange, which is the opposite of a tell.
+           */
+          const at = tileToLogical(fxToFloat(event.x), fxToFloat(event.y), viewTeam);
+          this.burst(at.x, at.y - TILE_H * 0.6, 9, '#cfe4f7', {
+            speed: 3.4,
+            size: 3,
+            shape: 'shard',
+            life: 300,
+            gravity: 0.05,
+          });
+          this.ring(at.x, at.y - TILE_H * 0.6, 'rgba(200,228,255,0.9)', 22, 200);
+          break;
+        }
+
         case 'spawn':
           // Handled by the entity renderer's spawn scale-up, not by particles.
           break;

@@ -259,6 +259,32 @@ register('aura_heal', {
   },
 });
 
+/**
+ * Plating aura — tops nearby allies back up to a small armour layer.
+ *
+ * Grants shield rather than health on purpose. A shield is a *separate*
+ * durability layer with overkill absorption, so one point of it given to a
+ * swarm is worth far more than one point of healing: each body it lands on
+ * eats one blow of any size. That is also why the top-up is capped and slow —
+ * a plate every few seconds is a real defensive investment, a plate every tick
+ * would make the escorted push unkillable by anything that hits once.
+ */
+register('aura_shield', {
+  onTick: (state, self, magnitude) => {
+    const period = Math.round(2.5 * TICK_HZ);
+    if (state.tick % period !== 0) return;
+    const cap = Math.max(1, Math.round(magnitude));
+    for (const ally of alliesInRadius(state, self, fx(3.2))) {
+      if (ally.kind === 'tower' || ally.kind === 'building') continue;
+      if (ally.shield >= cap) continue;
+      ally.shield = cap;
+      // The plate the renderer draws is keyed off `maxShield`, so a unit that
+      // never had one of its own still shows the armour it has been given.
+      ally.maxShield = Math.max(ally.maxShield, cap);
+    }
+  },
+});
+
 /** Slowing aura — everything hostile nearby moves at reduced speed. */
 register('aura_slow', {
   onTick: (state, self, magnitude) => {

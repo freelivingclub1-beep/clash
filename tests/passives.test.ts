@@ -11,6 +11,7 @@ import { stepMatch, stepMatchBy } from '@sim/tick';
 import { BLUE, RED } from '@sim/nav/grid';
 import { AP_PER_AETHER, TICK_HZ } from '@sim/constants';
 import { applyDamage, resolveStats } from '@sim/entities';
+import { applyStatus } from '@sim/systems/combat';
 import { hasPassive } from '@sim/scripts/passives';
 import { auditCard } from '@cards/balance';
 import type { Command, Entity, MatchState } from '@sim/types';
@@ -205,5 +206,129 @@ describe('role-wave cards', () => {
       (e) => e.alive && e.team === BLUE && e.cardId === 'card_troop_goblins',
     );
     expect(crew.length).toBeGreaterThan(0);
+  });
+});
+
+describe('aura_shield', () => {
+  const chaplain = 'card_troop_shield_chaplain';
+
+  it('is a registered, priced mechanic', () => {
+    expect(hasPassive('aura_shield')).toBe(true);
+    expect(auditCard(getCard(chaplain)).withinTolerance).toBe(true);
+  });
+
+  it('plates a nearby ally that had no armour of its own', () => {
+    const state = newMatch();
+    park(forceSpawn(state, BLUE, chaplain, 8, 12));
+    const ally = park(forceSpawn(state, BLUE, 'card_troop_knight', 8, 13));
+    expect(ally.shield).toBe(0);
+
+    stepMatchBy(state, TICK_HZ * 3);
+    expect(ally.shield).toBeGreaterThan(0);
+    // `maxShield` has to move too, or the renderer draws no plate on a unit
+    // that is visibly wearing one.
+    expect(ally.maxShield).toBeGreaterThanOrEqual(ally.shield);
+  });
+
+  it('grants armour that absorbs one hit of any size', () => {
+    const state = newMatch();
+    park(forceSpawn(state, BLUE, chaplain, 8, 12));
+    const ally = park(forceSpawn(state, BLUE, 'card_troop_knight', 8, 13));
+    stepMatchBy(state, TICK_HZ * 3);
+    const health = ally.hp;
+
+    applyDamage(state, ally, 50_000);
+    expect(ally.shield).toBe(0);
+    expect(ally.hp).toBe(health);
+  });
+
+  it('does not plate buildings or towers', () => {
+    const state = newMatch();
+    park(forceSpawn(state, BLUE, chaplain, 8, 12));
+    const cannon = park(forceSpawn(state, BLUE, 'card_building_cannon', 8, 13));
+    stepMatchBy(state, TICK_HZ * 3);
+    expect(cannon.shield).toBe(0);
+  });
+});
+
+describe('depth-wave cards', () => {
+  it('slows a whole push with Snare and kills nothing', () => {
+    const state = newMatch();
+    const victim = forceSpawn(state, RED, 'card_troop_giant', 8, 12);
+    victim.deployTimer = 0;
+    const health = victim.hp;
+
+    applyStatus(getCard('card_spell_snare'), victim, TICK_HZ * 4);
+    expect(victim.hp).toBe(health);
+    expect(victim.slowTicks).toBeGreaterThan(0);
+  });
+
+  it('hurries your own troops with Warcry rather than damaging theirs', () => {
+    const state = newMatch();
+    const ally = forceSpawn(state, BLUE, 'card_troop_knight', 8, 12);
+    ally.deployTimer = 0;
+    const health = ally.hp;
+
+    applyStatus(getCard('card_spell_warcry'), ally, TICK_HZ * 6);
+    expect(ally.rageTicks).toBeGreaterThan(0);
+    expect(ally.hp).toBe(health);
+  });
+
+  it('makes the Barbed Fence hurt what chews on it without ever attacking', () => {
+    const state = newMatch();
+    const fence = play(state, 'card_building_barbed_fence', 8, 10)[0];
+    fence.deployTimer = 0;
+    const attacker = park(forceSpawn(state, RED, 'card_troop_mini_pekka', 8, 11));
+    const attackerHealth = attacker.hp;
+
+    for (let i = 0; i < TICK_HZ * 6 && fence.hp === fence.maxHp; i++) stepMatch(state);
+    expect(fence.hp).toBeLessThan(fence.maxHp);
+    expect(attacker.hp).toBeLessThan(attackerHealth);
+    expect(getCard('card_building_barbed_fence').damage).toBe(0);
+  });
+
+  it('mends a wounded ally with the Wardstone', () => {
+    const state = newMatch();
+    play(state, 'card_building_wardstone', 8, 10);
+    const ally = park(forceSpawn(state, BLUE, 'card_troop_knight', 8, 11));
+    ally.hp = Math.round(ally.maxHp / 2);
+    const wounded = ally.hp;
+
+    stepMatchBy(state, TICK_HZ * 3);
+    expect(ally.hp).toBeGreaterThan(wounded);
+  });
+
+  it('leaves two Barbarians standing when the Grave Titan falls', () => {
+    const state = newMatch();
+    const titan = play(state, 'card_troop_grave_titan', 8, 10)[0];
+    applyDamage(state, titan, titan.maxHp + titan.shield);
+    stepMatch(state);
+    const risen = state.entities.filter(
+      (e) => e.alive && e.team === BLUE && e.cardId === 'card_troop_barbarians',
+    );
+    expect(risen.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('lets the Halberdier answer air, which the Pike Sentry cannot', () => {
+    expect(getCard('card_troop_halberdier').targetPriority).toBe('AirAndGround');
+    expect(getCard('card_troop_pike_sentry').targetPriority).toBe('Ground');
+    // The reach is the shared half of the idea.
+    expect(getCard('card_troop_halberdier').attackRange).toBeGreaterThan(2);
+  });
+
+  it('hides the Tunnel Rats while they travel, all three of them', () => {
+    // `burrow` is untargetable-while-moving, not river-crossing — that is
+    // `terrain_walk`, a different passive on a different card.
+    const state = newMatch();
+    const rats = play(state, 'card_troop_tunnel_rats', 8, 10);
+    expect(rats).toHaveLength(3);
+
+    stepMatchBy(state, TICK_HZ * 3);
+    expect(rats.every((rat) => rat.invisibleTicks > 0)).toBe(true);
+
+    // Stopping to bite surfaces them: the window to answer them is the fight.
+    for (const rat of rats) rat.speed = 0;
+    stepMatchBy(state, TICK_HZ);
+    expect(rats.every((rat) => rat.invisibleTicks === 0)).toBe(true);
   });
 });

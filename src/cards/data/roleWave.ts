@@ -347,7 +347,7 @@ export const BELL_TOWER = defineCard({
   description: 'Rings out a skeleton every few seconds. Cannot defend itself.',
   tint: '#9a8f7a',
   modelId: 'bellTower',
-  baseHealth: 1450,
+  baseHealth: 1750,
   massWeight: 100,
   speedClass: 'Medium',
   bodyRadius: 0.75,

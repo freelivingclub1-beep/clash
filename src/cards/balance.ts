@@ -194,6 +194,14 @@ export const PASSIVE_EPP_COST: Record<string, number> = {
   aura_heal: 260,
   /** Slows everything in a radius while alive. */
   aura_slow: 230,
+  /**
+   * Tops nearby allies up to a small armour layer every few seconds.
+   *
+   * Dearer than the healing aura because overkill absorption means a point of
+   * shield handed to a swarm is worth far more than a point of health: every
+   * body it lands on eats one blow of any size, whatever that blow was.
+   */
+  aura_shield: 340,
   /** Becomes stronger below a health threshold. */
   enrage_low_hp: 190,
   /** First hit taken is absorbed by a shield. */
@@ -457,10 +465,18 @@ export function auditCard(card: CardDefinition): BalanceAudit {
   const actualEpp =
     actualHealthPerUnit * units + actualDpsPerUnit * units * DAMAGE_WINDOW_SECONDS;
 
-  // Compare against the budget *after* modifiers, not the raw allowance.
-  // Measuring a long-range flier against its unpenalised budget would report
-  // every such card as wildly under-powered, because the penalties it already
-  // paid are exactly why its stats are low.
+  /*
+   * Compare against the budget *after* modifiers, not the raw allowance.
+   * Measuring a long-range flier against its unpenalised budget would report
+   * every such card as wildly under-powered, because the penalties it already
+   * paid are exactly why its stats are low.
+   *
+   * A card that deals no damage still gets charged for a damage allowance it
+   * cannot spend, which is correct rather than a gap: the allowance is what
+   * such a card must convert into health to be worth its cost. It just means
+   * a healing stone or a wall has to be *much* sturdier than its health budget
+   * alone suggests, and the audit is where that shows up.
+   */
   const effectiveBudget = budget.healthBudget + budget.dpsBudget * DAMAGE_WINDOW_SECONDS;
   const ratio = effectiveBudget > 0 ? actualEpp / effectiveBudget : 0;
   const withinTolerance = Math.abs(ratio - 1) <= BALANCE_TOLERANCE;
@@ -550,6 +566,21 @@ export const SPELL_BREAKPOINTS: readonly SpellBreakpoint[] = [
   {
     spellId: 'card_spell_fireball',
     // Glass-cannon ranged troops must die; mini-tanks must live at roughly 40%.
+    mustKill: ['card_troop_musketeer', 'card_troop_wizard', 'card_troop_archers'],
+    mustSurvive: [
+      { cardId: 'card_troop_knight', minHealthFraction: 0.3 },
+      { cardId: 'card_troop_valkyrie', minHealthFraction: 0.5 },
+    ],
+  },
+  {
+    /*
+     * Splinter Bomb is a Fireball breakpoint at a Fireball damage number, for
+     * one less aether — and that is fine only because of the radius. It kills
+     * the same glass cannons and leaves the same mini-tanks standing, but its
+     * blast is barely wider than a single body, so hitting the thing you meant
+     * to hit is the entire cost of the discount.
+     */
+    spellId: 'card_spell_splinter_bomb',
     mustKill: ['card_troop_musketeer', 'card_troop_wizard', 'card_troop_archers'],
     mustSurvive: [
       { cardId: 'card_troop_knight', minHealthFraction: 0.3 },

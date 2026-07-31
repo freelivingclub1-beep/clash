@@ -41,6 +41,7 @@ interface Rect {
 /** A CanvasRenderingContext2D stand-in that records the fills it is asked for. */
 function recordingContext() {
   const rects: Rect[] = [];
+  const roundRects: Rect[] = [];
   const context = {
     fillStyle: '#000',
     strokeStyle: '#000',
@@ -57,6 +58,9 @@ function recordingContext() {
     arc: () => {},
     ellipse: () => {},
     rect: () => {},
+    roundRect: (x: number, y: number, w: number, h: number) => {
+      roundRects.push({ x, y, w, h, fill: String(context.fillStyle) });
+    },
     fill: () => {},
     stroke: () => {},
     closePath: () => {},
@@ -76,7 +80,7 @@ function recordingContext() {
     clearRect: () => {},
     setLineDash: () => {},
   };
-  return { context, rects };
+  return { context, rects, roundRects };
 }
 
 /** A MatchRunner stand-in: no interpolation, positions used as-is. */
@@ -88,14 +92,14 @@ const newMatch = (): MatchState =>
   createMatch({ seed: 606, players: [{ deck: STARTER_DECK }, { deck: BOT_DECK }] });
 
 function render(state: MatchState) {
-  const { context, rects } = recordingContext();
+  const { context, rects, roundRects } = recordingContext();
   drawEntities(
     context as unknown as CanvasRenderingContext2D,
     state,
     stubRunner as never,
     BLUE,
   );
-  return rects;
+  return Object.assign(rects, { roundRects });
 }
 
 /** Warm hues only: the ramp bar is the sole amber-to-red rectangle drawn. */
@@ -161,5 +165,53 @@ describe('ramp tell', () => {
     // Same storage, different passive: a Knight carries no ramp to show.
     knight.passiveCharges = 7;
     expect(render(state).filter(isRampBar)).toHaveLength(0);
+  });
+});
+
+describe('armour plate', () => {
+  const newHound = () => {
+    const state = newMatch();
+    const hound = forceSpawn(state, BLUE, 'card_troop_elite_hounds', 8, 12);
+    hound.deployTimer = 0;
+    return { state, hound };
+  };
+
+  it('draws a plate on the body while the armour holds', () => {
+    const { state, hound } = newHound();
+    expect(hound.shield).toBeGreaterThan(0);
+    expect(render(state).roundRects.length).toBeGreaterThan(0);
+  });
+
+  it('takes the plate off the instant the armour breaks', () => {
+    const { state, hound } = newHound();
+    hound.shield = 0;
+    expect(render(state).roundRects).toHaveLength(0);
+  });
+
+  it('plates each body separately, so a scrum reads at a glance', () => {
+    const { state, hound } = newHound();
+    const second = forceSpawn(state, BLUE, 'card_troop_elite_hounds', 9, 12);
+    second.deployTimer = 0;
+
+    expect(render(state).roundRects).toHaveLength(2);
+    hound.shield = 0;
+    // One hound down to bare health, one still plated — the whole point.
+    expect(render(state).roundRects).toHaveLength(1);
+  });
+
+  it('sits on the figure rather than around it', () => {
+    const { state } = newHound();
+    const plate = render(state).roundRects[0];
+    // Narrower than the figure and short: a strapped-on band, not a bubble.
+    expect(plate.h).toBeLessThan(plate.w);
+    expect(plate.w).toBeGreaterThan(0);
+  });
+
+  it('is worn by any shielded unit, not just the hounds', () => {
+    const state = newMatch();
+    const guard = forceSpawn(state, BLUE, 'card_troop_spear_guards', 8, 12);
+    guard.deployTimer = 0;
+    expect(guard.shield).toBeGreaterThan(0);
+    expect(render(state).roundRects).toHaveLength(1);
   });
 });
