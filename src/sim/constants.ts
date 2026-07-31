@@ -88,6 +88,28 @@ export const TARGET_REACQUIRE_INTERVAL = 3;
 /** A locked target is dropped once it exceeds sightRange * this factor. */
 export const TARGET_LOSE_RANGE_FACTOR: Fx = fx(1.4);
 
+/**
+ * How much closer a new candidate must be before a unit will drop a lock for
+ * it, as an exact fraction of the current target's distance.
+ *
+ * This is what makes a blocker work. Without it a lock was absolute — a horde
+ * that had picked out your Archers walked straight past the tank you dropped
+ * in its face, because it never looked again. With it, a body placed properly
+ * in front takes the aggro, which is the entire point of placing one.
+ *
+ * The margin is the hysteresis: a candidate has to be *meaningfully* nearer,
+ * not a hair nearer, or two enemies at roughly equal range would trade the
+ * lock back and forth every scan and the unit would stand there twitching.
+ * 4/5 means "at least 20% closer".
+ *
+ * Expressed as a numerator and denominator, and compared in squared distance,
+ * so the whole test is exact integer arithmetic — no square roots, no
+ * float division, nothing that could round differently between two machines
+ * running the same match.
+ */
+export const RETARGET_CLOSER_NUMERATOR = 4;
+export const RETARGET_CLOSER_DENOMINATOR = 5;
+
 /** Boids separation strength, scaled per-entity by inverse mass. */
 export const SEPARATION_STRENGTH: Fx = fx(0.35);
 

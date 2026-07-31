@@ -6,15 +6,38 @@
  * re-queries every third tick, staggered by `(tick + id) % 3` so the cost is
  * spread evenly across ticks rather than spiking on every third one.
  *
- * A lock is sticky: once acquired it is held until the target dies, goes
- * invisible, or leaves `sightRange * 1.4`. That hysteresis is what stops units
- * from oscillating between two targets at the edge of range.
+ * A lock is held until the target dies, goes invisible, or leaves
+ * `sightRange * 1.4` — but it is not absolute. Three rules decide it, in
+ * order:
+ *
+ *   1. A unit already in range and swinging never switches. Mid-melee is
+ *      exactly when a lock should be immovable.
+ *   2. A unit still walking to its target will drop it for anything
+ *      meaningfully closer. This is what makes a blocker a blocker: a body
+ *      dropped in front of a push takes the push, rather than being strolled
+ *      past on the way to the shooters behind it.
+ *   3. The march objective is never sticky at all — it is where a unit goes
+ *      when nothing else is in sight, not a commitment.
+ *
+ * The margin in rule 2 is load-bearing hysteresis. Without it two enemies at
+ * roughly equal range would trade the lock on every scan.
  */
 
-import { fxLenSq } from '../math/fixed';
-import { TARGET_REACQUIRE_INTERVAL } from '../constants';
+import { fxLenSq, FX_ONE } from '../math/fixed';
+import {
+  RETARGET_CLOSER_DENOMINATOR,
+  RETARGET_CLOSER_NUMERATOR,
+  TARGET_REACQUIRE_INTERVAL,
+} from '../constants';
 import { TOWER_LAYOUTS, enemyOf } from '../nav/grid';
-import { canTarget, findEntity, isTargetable, objectiveTowerIndex, resolveStats } from '../entities';
+import {
+  type ResolvedStats,
+  canTarget,
+  findEntity,
+  isTargetable,
+  objectiveTowerIndex,
+  resolveStats,
+} from '../entities';
 import { type Entity, type MatchState, NO_TARGET } from '../types';
 
 /** Entities that never acquire targets of their own. */
@@ -85,6 +108,33 @@ function findBestTarget(state: MatchState, entity: Entity): Entity | undefined {
 }
 
 /**
+ * Is `candidate` near enough that `entity` is actually swinging at it?
+ *
+ * Mirrors the reach `combat` uses, so "engaged" here means the same thing it
+ * means there — a unit that is landing hits, not merely one that is close.
+ */
+function inAttackReach(entity: Entity, candidate: Entity, stats: ResolvedStats): boolean {
+  const reach = stats.attackRange + entity.radius + candidate.radius;
+  const reachSq = Math.round((reach * reach) / FX_ONE);
+  return fxLenSq(candidate.x - entity.x, candidate.y - entity.y) <= reachSq;
+}
+
+/**
+ * Is `foundDistSq` closer than `currentDistSq` by more than the retarget
+ * margin?
+ *
+ * Both are squared Q16.16 distances, so the margin is applied by squaring the
+ * fraction: `found <= (4/5)^2 * current` becomes `found * 25 <= current * 16`.
+ * Pure integer arithmetic — no square root, no division — which is what keeps
+ * the comparison identical on every machine replaying the match.
+ */
+function meaningfullyCloser(foundDistSq: number, currentDistSq: number): boolean {
+  const numeratorSq = RETARGET_CLOSER_NUMERATOR * RETARGET_CLOSER_NUMERATOR;
+  const denominatorSq = RETARGET_CLOSER_DENOMINATOR * RETARGET_CLOSER_DENOMINATOR;
+  return foundDistSq * denominatorSq <= currentDistSq * numeratorSq;
+}
+
+/**
  * The tower a unit falls back to when nothing is in sight. Also re-resolves
  * the objective when the lane's princess tower has since been destroyed.
  */
@@ -127,17 +177,16 @@ export function targetAcquisition(state: MatchState): void {
     const valid = currentTargetStillValid(state, entity, stats.loseRangeSq);
 
     /*
-     * A lock on a real combatant is sticky; a lock on the objective tower is
-     * not.
+     * A unit already swinging at something keeps swinging.
      *
-     * The objective is a fallback, not a commitment — it is simply where the
-     * unit walks when nothing is in front of it. Treating it as sticky (which
-     * the earlier stutter fix accidentally did, by exempting it from the range
-     * check and then skipping the rescan) meant a unit that had locked the
-     * tower never looked again, and walked straight past enemies within a tile
-     * of it without swinging.
+     * This is the one case where a lock is absolute. Letting a unit mid-melee
+     * turn to face whatever wandered a little nearer would make every fight
+     * unreadable and would mean no exchange ever finished — and it is exactly
+     * the case a player means by "it is already committed".
      */
-    if (valid && !marchingAtObjective) continue;
+    if (valid && !marchingAtObjective && current && inAttackReach(entity, current, stats)) {
+      continue;
+    }
 
     if (!valid && entity.targetId !== NO_TARGET) {
       // Losing a lock resets the wind-up: the next target must be earned.
@@ -150,9 +199,29 @@ export function targetAcquisition(state: MatchState): void {
 
     // Prefer a live combatant in sight; fall back to the march objective.
     const found = findBestTarget(state, entity) ?? objectiveTarget(state, entity);
-    if (found && found.id !== entity.targetId) {
-      entity.targetId = found.id;
-      entity.windupDone = false;
+    if (!found || found.id === entity.targetId) continue;
+
+    /*
+     * Still holding a valid lock on a combatant it has not reached yet: only
+     * a meaningfully closer body takes it.
+     *
+     * This is what makes placement work. A horde walking at your Archers used
+     * to be locked to them absolutely, so the tank you dropped in its face was
+     * simply walked past; now the tank is nearer, so the tank gets hit and the
+     * Archers get their value. The margin keeps two enemies at similar range
+     * from trading the lock every scan.
+     *
+     * The objective tower is exempt because it is a fallback rather than a
+     * choice — anything real in sight should take priority over walking at a
+     * tower, however far away that troop happens to be.
+     */
+    if (valid && !marchingAtObjective && current) {
+      const currentDistSq = fxLenSq(current.x - entity.x, current.y - entity.y);
+      const foundDistSq = fxLenSq(found.x - entity.x, found.y - entity.y);
+      if (!meaningfullyCloser(foundDistSq, currentDistSq)) continue;
     }
+
+    entity.targetId = found.id;
+    entity.windupDone = false;
   }
 }
