@@ -58,8 +58,35 @@ export function createDefaultProfile(userId = 'local-player'): PlayerProfile {
   });
 }
 
+/**
+ * Resolve localStorage without assuming it is reachable.
+ *
+ * Merely *touching* `globalThis.localStorage` throws a SecurityError in a
+ * sandboxed iframe and in Safari with cookies blocked — not on read, on
+ * property access. Evaluating it in a default parameter therefore took the
+ * whole app down before React mounted, in exactly the embedded contexts the
+ * standalone build is meant for.
+ */
+function safeStorage(): Storage | undefined {
+  try {
+    const storage = globalThis.localStorage;
+    // Prove it is writable, not merely present: some environments expose the
+    // object and reject every write.
+    const probe = '__clash_probe__';
+    storage.setItem(probe, '1');
+    storage.removeItem(probe);
+    return storage;
+  } catch {
+    return undefined;
+  }
+}
+
 export class LocalStorageProfileRepository implements ProfileRepository {
-  constructor(private readonly storage: Storage | undefined = globalThis.localStorage) {}
+  private readonly storage: Storage | undefined;
+
+  constructor(storage?: Storage) {
+    this.storage = storage ?? safeStorage();
+  }
 
   /** Set when the last load had to repair the stored document. */
   lastMigration: { migratedFrom: number | null; salvaged: boolean; lostFields: string[] } | null =
@@ -95,7 +122,13 @@ export class LocalStorageProfileRepository implements ProfileRepository {
   }
 
   async save(profile: PlayerProfile): Promise<void> {
-    this.storage?.setItem(STORAGE_KEY, JSON.stringify(profile));
+    try {
+      this.storage?.setItem(STORAGE_KEY, JSON.stringify(profile));
+    } catch {
+      // Quota exceeded or storage revoked mid-session. The in-memory profile
+      // stays correct for this session; failing the write must not throw into
+      // a lifecycle handler and take the page with it.
+    }
   }
 
   async reset(): Promise<PlayerProfile> {

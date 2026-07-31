@@ -10,7 +10,8 @@
     "typecheck": "tsc -b --pretty",
     "lint": "eslint .",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "build:standalone": "node scripts/build-standalone.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",
