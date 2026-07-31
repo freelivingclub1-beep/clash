@@ -1,0 +1,171 @@
+/**
+ * The render loop.
+ *
+ * Owns requestAnimationFrame and drives `MatchRunner.advance` with real
+ * elapsed time; the runner in turn decides how many 30Hz ticks that buys. The
+ * display can therefore run at 60Hz, 120Hz or anything else without the
+ * simulation rate changing — which is the whole point of decoupling them.
+ *
+ * React never re-renders per frame. It hands this class a mutable drag state
+ * and subscribes to a coarse HUD snapshot instead, so a 120Hz canvas does not
+ * mean 120 React renders a second.
+ */
+
+import type { MatchRunner } from '@game/match';
+import type { Team } from '@sim/types';
+import { drawArena, drawDeployOverlay, drawPlacementGhost } from './arena';
+import { drawEntities, drawEffects } from './entities';
+import {
+  type Viewport,
+  applyViewport,
+  computeViewport,
+  LOGICAL_W,
+  LOGICAL_H,
+  FIELD_TOP,
+  FIELD_HEIGHT,
+} from './camera';
+
+export interface DragState {
+  handIndex: number;
+  tileX: number;
+  tileY: number;
+  legal: boolean;
+  tint: string;
+  flying: boolean;
+}
+
+export interface HudSnapshot {
+  tick: number;
+  elixir: number;
+  crownsBlue: number;
+  crownsRed: number;
+  phase: string;
+  outcome: string;
+  abilityReady: boolean;
+  abilityCooldownSeconds: number;
+  heroOnField: boolean;
+}
+
+export class BattleRenderer {
+  private ctx: CanvasRenderingContext2D;
+  private viewport: Viewport;
+  private frameHandle = 0;
+  private lastTimestamp = 0;
+  private drag: DragState | null = null;
+  private running = false;
+
+  constructor(
+    private readonly canvas: HTMLCanvasElement,
+    private readonly runner: MatchRunner,
+    private readonly viewTeam: Team,
+    private readonly onHud?: (snapshot: HudSnapshot) => void,
+  ) {
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('2D canvas context unavailable');
+    this.ctx = context;
+    this.viewport = computeViewport(canvas.clientWidth, canvas.clientHeight, 1);
+    this.resize();
+  }
+
+  setDrag(drag: DragState | null): void {
+    this.drag = drag;
+  }
+
+  get currentViewport(): Viewport {
+    return this.viewport;
+  }
+
+  resize(): void {
+    const dpr = Math.min(globalThis.devicePixelRatio || 1, 2);
+    const cssWidth = this.canvas.clientWidth || LOGICAL_W;
+    const cssHeight = this.canvas.clientHeight || LOGICAL_H;
+    this.canvas.width = Math.round(cssWidth * dpr);
+    this.canvas.height = Math.round(cssHeight * dpr);
+    this.viewport = computeViewport(cssWidth, cssHeight, dpr);
+  }
+
+  start(): void {
+    if (this.running) return;
+    this.running = true;
+    this.lastTimestamp = 0;
+    const frame = (timestamp: number): void => {
+      if (!this.running) return;
+      const delta = this.lastTimestamp === 0 ? 0 : timestamp - this.lastTimestamp;
+      this.lastTimestamp = timestamp;
+
+      this.runner.advance(delta);
+      this.draw();
+      this.emitHud();
+
+      this.frameHandle = requestAnimationFrame(frame);
+    };
+    this.frameHandle = requestAnimationFrame(frame);
+  }
+
+  stop(): void {
+    this.running = false;
+    if (this.frameHandle) cancelAnimationFrame(this.frameHandle);
+    this.frameHandle = 0;
+  }
+
+  /** Render a single frame without advancing time. Used for tests and pauses. */
+  draw(): void {
+    const { ctx } = this;
+    const state = this.runner.state;
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#12161f';
+    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    applyViewport(ctx, this.viewport);
+
+    drawArena(ctx, state.grid, this.viewTeam);
+
+    if (this.drag) {
+      drawDeployOverlay(
+        ctx,
+        state.grid,
+        this.runner.localTeam,
+        state.players[this.runner.localTeam].deployRights,
+        this.drag.flying,
+        this.viewTeam,
+      );
+    }
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, FIELD_TOP, LOGICAL_W, FIELD_HEIGHT);
+    ctx.clip();
+
+    drawEntities(ctx, state, this.runner, this.viewTeam);
+    drawEffects(ctx, state, this.viewTeam);
+
+    if (this.drag) {
+      drawPlacementGhost(
+        ctx,
+        Math.floor(this.drag.tileX),
+        Math.floor(this.drag.tileY),
+        this.drag.legal,
+        this.drag.tint,
+        this.viewTeam,
+      );
+    }
+    ctx.restore();
+  }
+
+  private emitHud(): void {
+    if (!this.onHud) return;
+    const state = this.runner.state;
+    const local = state.players[this.runner.localTeam];
+    this.onHud({
+      tick: state.tick,
+      elixir: local.elixirPoints,
+      crownsBlue: state.players[0].crowns,
+      crownsRed: state.players[1].crowns,
+      phase: state.phase,
+      outcome: state.outcome,
+      abilityReady: local.heroAbilityCooldown === 0 && local.heroEntityId !== -1,
+      abilityCooldownSeconds: Math.ceil(local.heroAbilityCooldown / 30),
+      heroOnField: local.heroEntityId !== -1,
+    });
+  }
+}
