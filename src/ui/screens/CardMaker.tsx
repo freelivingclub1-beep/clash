@@ -28,6 +28,8 @@ import {
   validateCard,
 } from '@cards/schema';
 import { registerCardFromJson } from '@cards/registry';
+import { auditCard, PASSIVE_EPP_COST } from '@cards/balance';
+import { registeredPassives } from '@sim/scripts/passives';
 import { derivedStats, MAX_LEVEL, BASELINE_LEVEL } from '@cards/scaling';
 import { registeredEvolutionScripts } from '@sim/scripts/evolutions';
 
@@ -224,6 +226,13 @@ export function CardMaker({ onBack }: { onBack: () => void }) {
 
   const stats = useMemo(
     () => (validation.ok && validation.card ? derivedStats(validation.card) : null),
+    [validation],
+  );
+
+  // The audit runs against the validated card, so the numbers on screen are
+  // the same ones the roster test enforces at build time — no second model.
+  const audit = useMemo(
+    () => (validation.ok && validation.card ? auditCard(validation.card) : null),
     [validation],
   );
 
@@ -532,6 +541,24 @@ export function CardMaker({ onBack }: { onBack: () => void }) {
               />
             </div>
           )}
+          <Field label="Passive Mechanic">
+            <select value={draft.passiveId} onChange={(e) => update('passiveId', e.target.value)}>
+              {registeredPassives().map((id) => (
+                <option key={id} value={id}>
+                  {id === 'none' ? '(none)' : `${id} — ${PASSIVE_EPP_COST[id] ?? 0} EPP`}
+                </option>
+              ))}
+            </select>
+          </Field>
+          {draft.passiveId !== 'none' && (
+            <NumberInput
+              label="Passive Magnitude"
+              value={draft.passiveMagnitude}
+              step={0.05}
+              onChange={(v) => update('passiveMagnitude', v)}
+              invalid={issueFor('passiveMagnitude')}
+            />
+          )}
           <SelectInput
             label="Death Effect Trigger"
             value={draft.deathEffect}
@@ -670,6 +697,69 @@ export function CardMaker({ onBack }: { onBack: () => void }) {
                 onChange={(v) => update('abilityDurationSeconds', v)}
               />
             </>
+          )}
+        </Section>
+
+        {/* --- balance audit ------------------------------------------------- */}
+        <Section title="Balance Audit">
+          {audit ? (
+            <>
+              <div className="stat-line">
+                <span className="label">Raw budget ({draft.aetherCost} aether)</span>
+                <span>{audit.budget.rawEpp} EPP</span>
+              </div>
+              {audit.budget.spentOnAbility > 0 && (
+                <div className="stat-line">
+                  <span className="label">Paid for {draft.passiveId}</span>
+                  <span style={{ color: 'var(--danger)' }}>
+                    −{audit.budget.spentOnAbility} EPP
+                  </span>
+                </div>
+              )}
+              {audit.budget.modifiers.map((modifier) => (
+                <div className="stat-line" key={`${modifier.label}-${modifier.target}`}>
+                  <span className="label">
+                    {modifier.label} ({modifier.target.toUpperCase()})
+                  </span>
+                  <span style={{ color: modifier.multiplier < 1 ? 'var(--danger)' : 'var(--ok)' }}>
+                    ×{modifier.multiplier.toFixed(2)}
+                  </span>
+                </div>
+              ))}
+              <div className="stat-line">
+                <span className="label">Health allowance</span>
+                <span>
+                  {audit.budget.healthPerUnit} / unit · have {audit.actualHealthPerUnit}
+                </span>
+              </div>
+              <div className="stat-line">
+                <span className="label">DPS allowance</span>
+                <span>
+                  {audit.budget.dpsPerUnit} / unit · have {audit.actualDpsPerUnit}
+                </span>
+              </div>
+              <div
+                className="stat-line"
+                style={{
+                  fontWeight: 800,
+                  color: audit.withinTolerance ? 'var(--ok)' : 'var(--danger)',
+                }}
+              >
+                <span>{audit.withinTolerance ? 'Within budget' : 'Out of budget'}</span>
+                <span>
+                  {Math.round(audit.ratio * 100)}%
+                  {audit.variancePercent !== 0 &&
+                    ` (${audit.variancePercent > 0 ? '+' : ''}${audit.variancePercent}%)`}
+                </span>
+              </div>
+              {audit.notes.map((note) => (
+                <div className="muted" key={note}>
+                  {note}
+                </div>
+              ))}
+            </>
+          ) : (
+            <div className="muted">Fix the validation errors below to see the audit.</div>
           )}
         </Section>
 

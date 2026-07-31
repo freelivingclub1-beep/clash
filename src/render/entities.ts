@@ -1,11 +1,14 @@
 /**
  * Entity rendering.
  *
- * Placeholder geometry rather than sprite sheets: troops are discs, buildings
- * rounded squares, towers keeps. Each card's `tint` supplies its colour, so a
- * card authored in the Card Maker is immediately visible on the field without
- * anyone having to draw art for it first — which is the point of shipping the
- * authoring tool alongside the engine.
+ * Figures come from `./sprites`, which either loads a card's declared sprite
+ * URL or generates a character procedurally from the card's own stats. Either
+ * way a card authored in the Card Maker has usable art the moment it exists.
+ *
+ * Everything animated here is derived from simulation state — walk phase from
+ * speed and tick, spawn scale from the deploy timer, lunge from attack
+ * cooldown — so the renderer never holds animation state of its own and can be
+ * torn down and rebuilt mid-match without a visual glitch.
  *
  * Draw order is back-to-front by screen Y so overlapping units stack the way
  * the eye expects.
@@ -17,6 +20,7 @@ import { TOWER_LAYOUTS } from '@sim/nav/grid';
 import type { Entity, MatchState, Team } from '@sim/types';
 import type { MatchRunner } from '@game/match';
 import { TILE_W, TILE_H, tileToLogical } from './camera';
+import { spriteFor } from './sprites';
 
 const TEAM_COLOURS: Record<Team, { primary: string; dark: string }> = {
   0: { primary: '#4a9eff', dark: '#1b4f8a' },
@@ -41,98 +45,120 @@ function healthBar(
   ctx.fillRect(x - width / 2, y, width * clamped, height);
 }
 
+/**
+ * Walk-cycle phase for a unit.
+ *
+ * Driven by the simulation tick and the unit's own speed, so a Very Fast troop
+ * visibly strides faster than a Slow one, and a stationary unit holds a pose
+ * instead of marching on the spot. Offset by entity id so a spawned group does
+ * not move in lockstep like a single organism.
+ */
+function walkPhase(entity: Entity, tick: number): number {
+  const moving = entity.stepX !== 0 || entity.stepY !== 0;
+  if (!moving || entity.freezeTicks > 0 || entity.stunTicks > 0) return 0;
+  const speed = Math.max(0.02, fxToFloat(entity.speed));
+  const cyclesPerTick = speed * 3.2;
+  return ((tick * cyclesPerTick + entity.id * 0.37) % 1 + 1) % 1;
+}
+
 function drawTroop(
   ctx: CanvasRenderingContext2D,
   entity: Entity,
   screenX: number,
   screenY: number,
+  tick: number,
 ): void {
   const card = tryGetCard(entity.cardId);
-  const tint = card?.tint ?? '#cccccc';
-  const colours = TEAM_COLOURS[entity.team];
+  if (!card) return;
   const radius = Math.max(10, fxToFloat(entity.radius) * TILE_W);
 
   // Flying units are lifted off the ground with their shadow left behind, so
-  // air and ground are distinguishable at a glance.
+  // air and ground stay distinguishable at a glance.
   const lift = entity.flying ? TILE_H * 0.9 : 0;
+
+  ctx.save();
+
+  // Spawn animation: the figure scales up out of the ground over its deploy
+  // freeze, which makes the (very real) placement delay legible.
+  const deployTotal = 30;
+  const spawnProgress =
+    entity.deployTimer > 0 ? 1 - entity.deployTimer / deployTotal : 1;
+  const spawnScale = 0.4 + 0.6 * Math.max(0, Math.min(1, spawnProgress));
 
   ctx.fillStyle = 'rgba(0,0,0,0.35)';
   ctx.beginPath();
-  ctx.ellipse(screenX, screenY, radius * 0.9, radius * 0.45, 0, 0, Math.PI * 2);
+  ctx.ellipse(screenX, screenY, radius * 0.9 * spawnScale, radius * 0.45 * spawnScale, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  const bodyY = screenY - lift - radius * 0.4;
+  if (entity.invisibleTicks > 0) ctx.globalAlpha = 0.35;
 
-  // Team ring, then the card's own colour inside it.
-  ctx.fillStyle = colours.dark;
-  ctx.beginPath();
-  ctx.arc(screenX, bodyY, radius + 4, 0, Math.PI * 2);
-  ctx.fill();
+  const sprite = spriteFor(card, entity.team, walkPhase(entity, tick));
+  // Sprites are authored feet-at-the-bottom, so the draw box is anchored to
+  // the entity's ground position rather than centred on it.
+  const drawHeight = radius * 4.2 * spawnScale;
+  const drawWidth = drawHeight * (sprite.width / sprite.height);
+  const footY = screenY - lift;
 
-  ctx.fillStyle = tint;
-  ctx.beginPath();
-  ctx.arc(screenX, bodyY, radius, 0, Math.PI * 2);
-  ctx.fill();
+  // Attack lunge: for a few ticks after a swing the figure is shoved toward
+  // whatever it hit, so a melee exchange reads as an exchange rather than as
+  // two idle figures and a silently draining health bar.
+  const sinceSwing = entity.attackCooldown;
+  const lungeStrength = sinceSwing > 0 && entity.windupDone ? Math.min(1, sinceSwing / 6) : 0;
+  const facingLength = Math.hypot(fxToFloat(entity.faceX), fxToFloat(entity.faceY)) || 1;
+  const lungeX = (fxToFloat(entity.faceX) / facingLength) * lungeStrength * radius * 0.45;
+  const lungeY = (fxToFloat(entity.faceY) / facingLength) * lungeStrength * radius * 0.25;
 
-  // Evolved units get a bright halo — the clearest possible tell in a fight.
+  ctx.drawImage(
+    sprite.source,
+    screenX - drawWidth / 2 + lungeX,
+    footY - drawHeight - lungeY,
+    drawWidth,
+    drawHeight,
+  );
+
+  ctx.globalAlpha = 1;
+
+  const topY = footY - drawHeight;
+
+  // Evolved units get a bright halo — the clearest tell available in a fight.
   if (entity.evolved) {
     ctx.strokeStyle = '#ffd84a';
-    ctx.lineWidth = 4;
+    ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.arc(screenX, bodyY, radius + 7, 0, Math.PI * 2);
+    ctx.ellipse(screenX, screenY, radius * 1.15, radius * 0.6, 0, 0, Math.PI * 2);
     ctx.stroke();
-  }
-
-  // Champions carry a crown marker.
-  if (entity.isHero) {
-    ctx.fillStyle = '#ffd84a';
-    ctx.beginPath();
-    ctx.moveTo(screenX - radius * 0.6, bodyY - radius - 8);
-    ctx.lineTo(screenX, bodyY - radius - 22);
-    ctx.lineTo(screenX + radius * 0.6, bodyY - radius - 8);
-    ctx.closePath();
-    ctx.fill();
   }
 
   if (entity.shield > 0) {
-    ctx.strokeStyle = '#9fd8ff';
+    ctx.strokeStyle = 'rgba(159,216,255,0.9)';
     ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.arc(screenX, bodyY, radius + 11, 0, Math.PI * 2);
+    ctx.ellipse(screenX, footY - drawHeight / 2, drawWidth * 0.55, drawHeight * 0.55, 0, 0, Math.PI * 2);
     ctx.stroke();
   }
 
-  // Status tells.
+  // Status tells, drawn over the figure so they are never hidden by it.
   if (entity.freezeTicks > 0 || entity.stunTicks > 0) {
-    ctx.fillStyle = 'rgba(140,220,255,0.5)';
-    ctx.beginPath();
-    ctx.arc(screenX, bodyY, radius + 3, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.fillStyle = 'rgba(140,220,255,0.35)';
+    ctx.fillRect(screenX - drawWidth / 2, topY, drawWidth, drawHeight);
   }
   if (entity.rageTicks > 0) {
-    ctx.strokeStyle = '#e05bd5';
+    ctx.strokeStyle = 'rgba(224,91,213,0.9)';
     ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.arc(screenX, bodyY, radius + 14, 0, Math.PI * 2);
+    ctx.ellipse(screenX, screenY, radius * 1.3, radius * 0.7, 0, 0, Math.PI * 2);
     ctx.stroke();
   }
-  if (entity.invisibleTicks > 0) {
-    ctx.globalAlpha = 0.4;
+  if (entity.poisonTicks > 0) {
+    ctx.fillStyle = 'rgba(120,200,90,0.28)';
+    ctx.fillRect(screenX - drawWidth / 2, topY, drawWidth, drawHeight);
   }
 
   if (entity.hp < entity.maxHp) {
-    healthBar(ctx, screenX, bodyY - radius - 20, radius * 2.2, entity.hp / entity.maxHp, entity.team);
+    healthBar(ctx, screenX, topY - 14, radius * 2.2, entity.hp / entity.maxHp, entity.team);
   }
-  ctx.globalAlpha = 1;
 
-  // Deploy freeze: a shrinking ring, so the delay is legible.
-  if (entity.deployTimer > 0) {
-    ctx.strokeStyle = 'rgba(255,255,255,0.8)';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(screenX, screenY, radius + 10, 0, Math.PI * 2);
-    ctx.stroke();
-  }
+  ctx.restore();
 }
 
 function drawBuilding(
@@ -142,16 +168,16 @@ function drawBuilding(
   screenY: number,
 ): void {
   const card = tryGetCard(entity.cardId);
-  const size = Math.max(24, fxToFloat(entity.radius) * TILE_W * 1.8);
-  const colours = TEAM_COLOURS[entity.team];
+  if (!card) return;
+  const size = Math.max(24, fxToFloat(entity.radius) * TILE_W * 2.4);
 
   ctx.fillStyle = 'rgba(0,0,0,0.35)';
-  ctx.fillRect(screenX - size / 2, screenY - size / 4, size, size / 2);
+  ctx.beginPath();
+  ctx.ellipse(screenX, screenY, size * 0.45, size * 0.2, 0, 0, Math.PI * 2);
+  ctx.fill();
 
-  ctx.fillStyle = colours.dark;
-  ctx.fillRect(screenX - size / 2 - 3, screenY - size - 3, size + 6, size + 6);
-  ctx.fillStyle = card?.tint ?? '#999999';
-  ctx.fillRect(screenX - size / 2, screenY - size, size, size);
+  const sprite = spriteFor(card, entity.team, 0);
+  ctx.drawImage(sprite.source, screenX - size / 2, screenY - size, size, size);
 
   healthBar(ctx, screenX, screenY - size - 20, size * 1.1, entity.hp / entity.maxHp, entity.team);
 
@@ -251,7 +277,7 @@ export function drawEntities(
         drawProjectile(ctx, entity, screenX, screenY);
         break;
       default:
-        drawTroop(ctx, entity, screenX, screenY);
+        drawTroop(ctx, entity, screenX, screenY, state.tick);
     }
   }
 }
