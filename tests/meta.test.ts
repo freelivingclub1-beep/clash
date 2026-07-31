@@ -15,7 +15,12 @@ import {
   createDefaultProfile,
   applyMatchResult,
 } from '@game/profile/repository';
-import { arenaForTrophies, cardLevelMap, playerProfileSchema } from '@game/profile/schema';
+import {
+  arenaForTrophies,
+  cardLevelMap,
+  playerProfileSchema,
+  MAX_BATTLE_LOG,
+} from '@game/profile/schema';
 import type { Command, MatchState } from '@sim/types';
 
 const config = (): MatchConfig => ({
@@ -238,6 +243,41 @@ describe('tower troops', () => {
   });
 });
 
+describe('match statistics', () => {
+  it('counts every card actually deployed, and no rejected ones', () => {
+    const state = createMatch(config());
+    expect(state.players[BLUE].cardsPlayed).toBe(0);
+
+    playCard(state, 'card_troop_knight', 8, 10);
+    playCard(state, 'card_troop_musketeer', 8, 11);
+    expect(state.players[BLUE].cardsPlayed).toBe(2);
+
+    // An illegal placement must not count toward the summary.
+    state.players[BLUE].hand[0] = 'card_troop_knight';
+    state.players[BLUE].aetherPoints = 10 * AP_PER_AETHER;
+    stepMatch(state, [{ type: 'deploy', team: BLUE, handIndex: 0, tileX: 8, tileY: 28 }]);
+    expect(state.players[BLUE].cardsPlayed).toBe(2);
+  });
+
+  it('announces a tower falling exactly once', () => {
+    const state = createMatch(config());
+    const tower = state.entities.find((e) => e.towerIndex === 3)!;
+    tower.hp = 0;
+    tower.alive = false;
+    state.needsCompaction = true;
+
+    stepMatch(state);
+    const announced = state.events.filter(
+      (e) => e.type === 'towerDestroyed' && e.towerIndex === 3,
+    );
+    expect(announced).toHaveLength(1);
+
+    // The tower stays down, but the event must not repeat every tick after.
+    stepMatchBy(state, 5);
+    expect(state.events.some((e) => e.type === 'towerDestroyed')).toBe(false);
+  });
+});
+
 describe('deck rules', () => {
   it('accepts both shipped decks', () => {
     expect(validateDeck(STARTER_DECK).ok).toBe(true);
@@ -367,6 +407,58 @@ describe('player profile', () => {
     expect(arenaForTrophies(0)).toBe(1);
     expect(arenaForTrophies(4000)).toBe(11);
     expect(arenaForTrophies(999999)).toBe(24);
+  });
+
+  it('records a battle log entry with the match summary', async () => {
+    const profile = createDefaultProfile();
+    applyMatchResult(profile, 'blue', 0, {
+      crownsFor: 2,
+      crownsAgainst: 1,
+      opponentName: 'TestFoe',
+      durationSeconds: 148,
+      cardsPlayed: 21,
+      towerDamageDealt: 3400,
+    });
+
+    expect(profile.battleLog).toHaveLength(1);
+    const entry = profile.battleLog[0];
+    expect(entry.outcome).toBe('win');
+    expect(entry.crownsFor).toBe(2);
+    expect(entry.opponentName).toBe('TestFoe');
+    expect(entry.cardsPlayed).toBe(21);
+    expect(entry.trophyDelta).toBeGreaterThan(0);
+  });
+
+  it('logs draws too, with no trophy movement', () => {
+    const profile = createDefaultProfile();
+    const before = profile.trophies;
+    applyMatchResult(profile, 'draw', 0, { crownsFor: 1, crownsAgainst: 1 });
+
+    expect(profile.trophies).toBe(before);
+    expect(profile.wins).toBe(0);
+    expect(profile.losses).toBe(0);
+    // A history that silently omitted draws would not reconcile with W/L.
+    expect(profile.battleLog[0].outcome).toBe('draw');
+    expect(profile.battleLog[0].trophyDelta).toBe(0);
+  });
+
+  it('keeps the battle log to a fixed window, newest first', () => {
+    const profile = createDefaultProfile();
+    for (let i = 0; i < MAX_BATTLE_LOG + 8; i++) {
+      applyMatchResult(profile, 'blue', 0, { opponentName: `Foe${i}` });
+    }
+    expect(profile.battleLog).toHaveLength(MAX_BATTLE_LOG);
+    expect(profile.battleLog[0].opponentName).toBe(`Foe${MAX_BATTLE_LOG + 7}`);
+  });
+
+  it('survives a save/load round trip with a populated log', async () => {
+    const profile = await repository.load();
+    applyMatchResult(profile, 'red', 0, { opponentName: 'Nemesis', crownsAgainst: 3 });
+    await repository.save(profile);
+
+    const reloaded = await repository.load();
+    expect(reloaded.battleLog[0].opponentName).toBe('Nemesis');
+    expect(playerProfileSchema.safeParse(reloaded).success).toBe(true);
   });
 
   it('excludes engine-only cards from the collection', async () => {

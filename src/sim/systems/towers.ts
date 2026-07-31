@@ -25,6 +25,17 @@ export function towerState(state: MatchState): void {
     const layout = TOWER_LAYOUTS[towerIndex];
     const attacker = state.players[enemyOf(layout.team)];
 
+    // Announce the fall exactly once, on the tick the tower's entity is still
+    // present but no longer alive. Crowns are recounted from scratch every
+    // tick, so the loop itself cannot tell "already down" from "just fell" —
+    // the dying entity can.
+    const justFell = state.entities.some(
+      (e) => e.towerIndex === towerIndex && !e.alive && e.hp <= 0,
+    );
+    if (justFell) {
+      state.events.push({ type: 'towerDestroyed', towerIndex, team: layout.team });
+    }
+
     // A king tower is worth three crowns and ends the match outright.
     attacker.crowns += layout.kind === 'king' ? 3 : 1;
 

@@ -17,6 +17,9 @@ import { MatchRunner } from '@game/match';
 import { BotController } from '@net/bot/botAI';
 import { LocalTransport } from '@net/transport';
 import { BattleRenderer, type DragState, type HudSnapshot } from '@render/loop';
+import { audio } from '@render/audio';
+import { TOWER_LAYOUTS } from '@sim/nav/grid';
+import type { MatchSummary } from '@game/profile/repository';
 import { clientToTile } from '@render/camera';
 import { canDeployAt } from '@sim/nav/grid';
 import { AP_PER_AETHER } from '@sim/constants';
@@ -37,8 +40,11 @@ export interface BattleProps {
   config: MatchConfig;
   localTeam: Team;
   opponentName: string;
-  onExit: (outcome: 'blue' | 'red' | 'draw' | 'ongoing') => void;
+  onExit: (outcome: 'blue' | 'red' | 'draw' | 'ongoing', summary?: MatchSummary) => void;
 }
+
+/** Ticks of "3 - 2 - 1 - GO" before the board becomes interactive. */
+const COUNTDOWN_MS = 3200;
 
 const EMPTY_HUD: HudSnapshot = {
   tick: 0,
@@ -59,6 +65,7 @@ export function Battle({ config, localTeam, opponentName, onExit }: BattleProps)
 
   const [hud, setHud] = useState<HudSnapshot>(EMPTY_HUD);
   const [dragging, setDragging] = useState<number | null>(null);
+  const [countdown, setCountdown] = useState(3);
 
   // The runner outlives renders; building it once keeps the match from being
   // silently restarted by an unrelated re-render.
@@ -111,6 +118,37 @@ export function Battle({ config, localTeam, opponentName, onExit }: BattleProps)
   }, [runner, localTeam]);
 
   useEffect(() => () => runner.dispose(), [runner]);
+
+  /**
+   * Match intro. The simulation is already running underneath — both players
+   * bank aether during the count, exactly as in the reference game — so this
+   * is presentation only and never gates the tick loop.
+   */
+  useEffect(() => {
+    const steps = [3, 2, 1, 0];
+    const timers = steps.map((value, index) =>
+      globalThis.setTimeout(() => {
+        setCountdown(value);
+        audio.play(value === 0 ? 'ability' : 'countdown');
+      }, index * (COUNTDOWN_MS / steps.length)),
+    );
+    return () => timers.forEach((timer) => globalThis.clearTimeout(timer));
+  }, []);
+
+  // Browsers refuse to start an AudioContext outside a user gesture, so the
+  // first touch anywhere on the battle screen is what unlocks sound.
+  useEffect(() => {
+    if (hud.outcome === 'ongoing') return;
+    const won =
+      (hud.outcome === 'blue' && localTeam === 0) || (hud.outcome === 'red' && localTeam === 1);
+    audio.play(hud.outcome === 'draw' ? 'uiTap' : won ? 'victory' : 'defeat');
+  }, [hud.outcome, localTeam]);
+
+  useEffect(() => {
+    const unlock = () => audio.unlock();
+    globalThis.addEventListener('pointerdown', unlock, { once: true });
+    return () => globalThis.removeEventListener('pointerdown', unlock);
+  }, []);
 
   // --- drag to deploy ------------------------------------------------------
 
@@ -197,7 +235,10 @@ export function Battle({ config, localTeam, opponentName, onExit }: BattleProps)
         if (tileX < 0 || tileX > 17 || tileY < 0 || tileY > 31) return;
 
         // The simulation re-validates this; an illegal drop is simply dropped.
+        const card = tryGetCard(runner.state.players[localTeam].hand[active.handIndex]);
         runner.submitDeploy(active.handIndex, tileX, tileY);
+        audio.play('deploy');
+        if (card) rendererRef.current?.vfx.deployBurst(tileX, tileY, card.tint, localTeam);
       };
 
       globalThis.addEventListener('pointermove', onMove);
@@ -214,6 +255,14 @@ export function Battle({ config, localTeam, opponentName, onExit }: BattleProps)
   const finished = hud.outcome !== 'ongoing';
   const localWon =
     (hud.outcome === 'blue' && localTeam === 0) || (hud.outcome === 'red' && localTeam === 1);
+  const crownsFor = localTeam === 0 ? hud.crownsBlue : hud.crownsRed;
+  const crownsAgainst = localTeam === 0 ? hud.crownsRed : hud.crownsBlue;
+
+  // Damage the local player has put into enemy towers, summed from the towers
+  // themselves rather than tracked incrementally — the entities are the record.
+  const towerDamageDealt = runner.state.entities
+    .filter((e) => e.towerIndex >= 0 && TOWER_LAYOUTS[e.towerIndex].team !== localTeam)
+    .reduce((sum, tower) => sum + (tower.maxHp - tower.hp), 0);
 
   return (
     <div className="stage">
@@ -239,7 +288,10 @@ export function Battle({ config, localTeam, opponentName, onExit }: BattleProps)
             !!heroCardId &&
             player.aetherPoints >= (tryGetCard(heroCardId)?.abilityAetherCost ?? 99) * AP_PER_AETHER
           }
-          onActivate={() => runner.submitAbility()}
+          onActivate={() => {
+            audio.unlock();
+            runner.submitAbility();
+          }}
         />
 
         <div className="battle-hud">
@@ -267,15 +319,66 @@ export function Battle({ config, localTeam, opponentName, onExit }: BattleProps)
         </div>
       </div>
 
+      {countdown > 0 && (
+        <div className="countdown-overlay">
+          <span className="count">{countdown}</span>
+        </div>
+      )}
+
       {finished && (
         <div className="result-overlay">
           <div className={`headline ${hud.outcome === 'draw' ? '' : localWon ? 'win' : 'loss'}`}>
             {hud.outcome === 'draw' ? 'Draw' : localWon ? 'Victory' : 'Defeat'}
           </div>
-          <div className="muted">
-            {hud.crownsBlue} – {hud.crownsRed} crowns
+          <div className="crown-result">
+            {[0, 1, 2].map((i) => (
+              <span key={i} className={`crown-big${i < crownsFor ? ' filled' : ''}`}>
+                ★
+              </span>
+            ))}
           </div>
-          <button className="button" onClick={() => onExit(hud.outcome as 'blue' | 'red' | 'draw')}>
+          <div className="panel result-stats">
+            <div className="stat-line">
+              <span className="label">Crowns</span>
+              <span>
+                {crownsFor} – {crownsAgainst}
+              </span>
+            </div>
+            <div className="stat-line">
+              <span className="label">Cards played</span>
+              <span>{player.cardsPlayed}</span>
+            </div>
+            <div className="stat-line">
+              <span className="label">Aether spent</span>
+              <span>{Math.round(player.aetherSpent / 84)}</span>
+            </div>
+            <div className="stat-line">
+              <span className="label">Tower damage dealt</span>
+              <span>{towerDamageDealt}</span>
+            </div>
+            <div className="stat-line">
+              <span className="label">Match length</span>
+              <span>
+                {Math.floor(runner.state.tick / 30 / 60)}:
+                {String(Math.floor(runner.state.tick / 30) % 60).padStart(2, '0')}
+              </span>
+            </div>
+          </div>
+          <button
+            className="button"
+            onClick={() =>
+              onExit(hud.outcome as 'blue' | 'red' | 'draw', {
+                outcome: hud.outcome as 'blue' | 'red' | 'draw',
+                localTeam,
+                crownsFor,
+                crownsAgainst,
+                opponentName,
+                durationSeconds: Math.floor(runner.state.tick / 30),
+                cardsPlayed: player.cardsPlayed,
+                towerDamageDealt,
+              })
+            }
+          >
             Continue
           </button>
         </div>

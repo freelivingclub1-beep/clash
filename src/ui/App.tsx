@@ -88,9 +88,9 @@ export function App() {
           config={screen.config}
           localTeam={0}
           opponentName={screen.opponent.name}
-          onExit={(outcome) => {
+          onExit={(outcome, summary) => {
             if (outcome !== 'ongoing') {
-              void persist(applyMatchResult({ ...profile }, outcome, 0));
+              void persist(applyMatchResult({ ...profile }, outcome, 0, summary));
             }
             setScreen({ name: 'home' });
           }}
@@ -182,6 +182,34 @@ export function App() {
           <button className="button secondary" onClick={() => setScreen({ name: 'cardmaker' })}>
             Card Maker Studio
           </button>
+          {profile.battleLog.length > 0 && (
+            <div className="panel">
+              <h2 style={{ marginBottom: 6 }}>Recent Battles</h2>
+              {profile.battleLog.slice(0, 5).map((entry, index) => (
+                <div className="stat-line" key={index}>
+                  <span
+                    className="label"
+                    style={{
+                      color:
+                        entry.outcome === 'win'
+                          ? 'var(--ok)'
+                          : entry.outcome === 'loss'
+                            ? 'var(--danger)'
+                            : 'var(--muted)',
+                    }}
+                  >
+                    {entry.outcome.toUpperCase()} · {entry.opponentName}
+                  </span>
+                  <span>
+                    {entry.crownsFor}–{entry.crownsAgainst}
+                    {entry.trophyDelta !== 0 &&
+                      ` (${entry.trophyDelta > 0 ? '+' : ''}${entry.trophyDelta})`}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
           <button
             className="button danger"
             onClick={() => void repository.reset().then(setProfile)}

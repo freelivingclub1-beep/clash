@@ -24,6 +24,8 @@ import {
   FIELD_TOP,
   FIELD_HEIGHT,
 } from './camera';
+import { VfxSystem } from './vfx';
+import { audio, cueForEvent } from './audio';
 
 export interface DragState {
   handIndex: number;
@@ -53,6 +55,8 @@ export class BattleRenderer {
   private lastTimestamp = 0;
   private drag: DragState | null = null;
   private running = false;
+  /** Particles, damage numbers and screen shake. Purely cosmetic. */
+  readonly vfx = new VfxSystem();
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -94,6 +98,20 @@ export class BattleRenderer {
       this.lastTimestamp = timestamp;
 
       this.runner.advance(delta);
+
+      // Drain once per frame rather than reading state.events directly: a
+      // frame may cover zero or two ticks, and events live for exactly one.
+      const events = this.runner.drainEvents();
+      if (events.length > 0) {
+        this.vfx.consume(events, this.viewTeam);
+        for (const event of events) {
+          const cue = cueForEvent(event.type, event.type === 'hit' ? event.splash : undefined);
+          if (cue) audio.play(cue);
+        }
+      }
+
+      audio.tick(delta);
+      this.vfx.update(delta);
       this.draw();
       this.emitHud();
 
@@ -118,6 +136,11 @@ export class BattleRenderer {
     ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     applyViewport(ctx, this.viewport);
 
+    // Screen shake displaces the whole scene, including the arena, so the
+    // board itself lurches rather than the units sliding across a static one.
+    const shake = this.vfx.shakeOffset();
+    ctx.translate(shake.x, shake.y);
+
     drawArena(ctx, state.grid, this.viewTeam);
 
     if (this.drag) {
@@ -139,6 +162,8 @@ export class BattleRenderer {
     drawEntities(ctx, state, this.runner, this.viewTeam);
     drawEffects(ctx, state, this.viewTeam);
 
+    this.vfx.drawParticles(ctx);
+
     if (this.drag) {
       drawPlacementGhost(
         ctx,
@@ -149,6 +174,9 @@ export class BattleRenderer {
         this.viewTeam,
       );
     }
+
+    // Damage numbers last, so nothing can occlude them.
+    this.vfx.drawNumbers(ctx);
     ctx.restore();
   }
 

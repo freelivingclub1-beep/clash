@@ -32,6 +32,25 @@ export const collectionEntrySchema = z.object({
   evolutionShardsInvested: z.number().int().min(0).max(MAX_EVOLUTION_SHARDS).default(0),
 });
 
+/**
+ * One finished match. Kept short and capped in the repository, because a
+ * profile is a single localStorage blob and an unbounded history would grow
+ * it without limit.
+ */
+export const battleLogEntrySchema = z.object({
+  outcome: z.enum(['win', 'loss', 'draw']),
+  crownsFor: z.number().int().min(0).max(3).default(0),
+  crownsAgainst: z.number().int().min(0).max(3).default(0),
+  opponentName: z.string().default('Opponent'),
+  trophyDelta: z.number().int().default(0),
+  /** Seconds of match time played. */
+  durationSeconds: z.number().int().min(0).default(0),
+  cardsPlayed: z.number().int().min(0).default(0),
+  towerDamageDealt: z.number().int().min(0).default(0),
+});
+
+export const MAX_BATTLE_LOG = 20;
+
 export const playerProfileSchema = z.object({
   schemaVersion: z.literal(1).default(1),
 
@@ -54,7 +73,10 @@ export const playerProfileSchema = z.object({
   // --- record --------------------------------------------------------------
   wins: z.number().int().min(0).default(0),
   losses: z.number().int().min(0).default(0),
+  battleLog: z.array(battleLogEntrySchema).max(MAX_BATTLE_LOG).default([]),
 });
+
+export type BattleLogEntry = z.infer<typeof battleLogEntrySchema>;
 
 export type Wallet = z.infer<typeof walletSchema>;
 export type CollectionEntry = z.infer<typeof collectionEntrySchema>;

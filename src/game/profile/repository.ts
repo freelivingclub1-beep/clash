@@ -15,8 +15,10 @@ import { STARTER_DECK } from '@cards/data';
 import {
   type PlayerProfile,
   type CollectionEntry,
+  type BattleLogEntry,
   playerProfileSchema,
   arenaForTrophies,
+  MAX_BATTLE_LOG,
   MAX_EVOLUTION_SHARDS,
 } from './schema';
 
@@ -121,21 +123,52 @@ export class InMemoryProfileRepository implements ProfileRepository {
   }
 }
 
-/** Apply a match result to a profile. Trophy swings follow the crown margin. */
+/** Everything the post-match screen and the battle log need from a match. */
+export interface MatchSummary {
+  outcome: 'blue' | 'red' | 'draw';
+  localTeam: 0 | 1;
+  crownsFor: number;
+  crownsAgainst: number;
+  opponentName: string;
+  durationSeconds: number;
+  cardsPlayed: number;
+  towerDamageDealt: number;
+}
+
+/**
+ * Apply a match result to a profile: trophies, record, and the battle log.
+ *
+ * A draw still gets logged. It moves no trophies, but a history that silently
+ * omits draws makes the win/loss counts look wrong next to it.
+ */
 export function applyMatchResult(
   profile: PlayerProfile,
   outcome: 'blue' | 'red' | 'draw',
   localTeam: 0 | 1,
+  summary?: Partial<MatchSummary>,
 ): PlayerProfile {
   const localWon = (outcome === 'blue' && localTeam === 0) || (outcome === 'red' && localTeam === 1);
+  const delta = outcome === 'draw' ? 0 : localWon ? 30 : -29;
 
-  if (outcome === 'draw') return profile;
+  if (outcome !== 'draw') {
+    profile.trophies = Math.max(0, profile.trophies + delta);
+    profile.currentArena = arenaForTrophies(profile.trophies);
+    if (localWon) profile.wins++;
+    else profile.losses++;
+  }
 
-  const delta = localWon ? 30 : -29;
-  profile.trophies = Math.max(0, profile.trophies + delta);
-  profile.currentArena = arenaForTrophies(profile.trophies);
-  if (localWon) profile.wins++;
-  else profile.losses++;
+  const entry: BattleLogEntry = {
+    outcome: outcome === 'draw' ? 'draw' : localWon ? 'win' : 'loss',
+    crownsFor: summary?.crownsFor ?? 0,
+    crownsAgainst: summary?.crownsAgainst ?? 0,
+    opponentName: summary?.opponentName ?? 'Opponent',
+    trophyDelta: delta,
+    durationSeconds: summary?.durationSeconds ?? 0,
+    cardsPlayed: summary?.cardsPlayed ?? 0,
+    towerDamageDealt: summary?.towerDamageDealt ?? 0,
+  };
+  // Newest first, oldest evicted — a fixed-size window, not a growing log.
+  profile.battleLog = [entry, ...profile.battleLog].slice(0, MAX_BATTLE_LOG);
 
   return profile;
 }

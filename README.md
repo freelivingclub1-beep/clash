@@ -192,6 +192,34 @@ React owns the HUD and the drag gesture; the renderer owns the field and the fra
 They meet at two narrow points — a mutable drag state pushed in, a coarse HUD snapshot
 pushed back — so a 120Hz canvas never means 120 React renders a second.
 
+## Presentation
+
+The simulation already emitted `hit`, `death`, `spell`, `ability` and `towerDestroyed`
+events; nothing was drawing them, so combat resolved as health bars quietly changing length.
+
+- **`src/render/vfx.ts`** — particles, floating damage numbers and screen shake, driven
+  entirely by those events. Fixed-size ring buffers: a splash spell landing in a swarm emits
+  hundreds of particles at once, and allocating them would cause exactly the GC stutter the
+  effects exist to hide. Nothing here feeds back into the simulation, so effects can never
+  desync a match.
+- **`src/render/audio.ts`** — every cue synthesised with Web Audio rather than loaded. That
+  avoids both a licensing problem and a binary payload, and lets a cue be tuned as parameters.
+  Impact cues are rate-limited so a swarm fight is a series of hits rather than a buzz.
+- **Match flow** — a "3‑2‑1" intro (presentation only; the simulation runs underneath so both
+  players bank aether during it, as in the reference game), and a post-match summary with
+  crowns, cards played, aether spent, tower damage and match length.
+
+Events are buffered in `MatchRunner` and drained once per frame rather than read from
+`state.events` directly: events live for exactly one tick, but a render frame may cover zero
+or two, so reading them directly dropped effects on some frames and would replay them on
+others.
+
+## Persistence
+
+`PlayerProfile` now carries a capped battle log — outcome, crowns, opponent, trophy delta,
+duration, cards played and tower damage — shown on the home screen. Draws are logged too;
+a history that silently omitted them would not reconcile with the win/loss counts.
+
 ## Card Maker Studio
 
 `Card Maker Studio` on the home screen. Implements spec §4 sections A–G with the specified

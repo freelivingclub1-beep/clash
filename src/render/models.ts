@@ -148,6 +148,16 @@ export const MODELS: Record<string, ModelSpec> = {
   aegisBreaker: model('mech', 'horned', 'hammer', 'none', 1.1),
   marshWalker: model('serpent', 'crest', 'spear', 'none', 1.0),
   packAlpha: model('quadruped', 'horned', 'claws', 'none', 1.05),
+
+  // --- third unique wave ---------------------------------------------------
+  cinderImp: model('humanoid', 'horned', 'dagger', 'none', 0.6),
+  dartAcolyte: model('humanoid', 'mask', 'spear', 'none', 0.82),
+  obsidianColossus: model('golem', 'horned', 'hammer', 'cape', 1.5),
+  stormDrake: model('winged', 'horned', 'bomb', 'wings', 1.25),
+  tideCaller: model('wraith', 'crest', 'staff', 'halo', 1.0),
+  frostPylon: model('structure', 'crest', 'staff', 'none', 0.95),
+  thornWarden: model('insect', 'crest', 'spear', 'none', 0.8),
+  stoneWarden: model('golem', 'helm', 'hammer', 'shield', 1.15),
 };
 
 export function modelSpec(modelId: string, fallback: ModelSpec): ModelSpec {

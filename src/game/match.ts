@@ -17,13 +17,16 @@
 import { createMatch, type MatchConfig } from '@sim/state';
 import { stepMatch } from '@sim/tick';
 import { TICK_MS } from '@sim/constants';
-import type { MatchState, Command, Team } from '@sim/types';
+import type { MatchState, Command, Team, SimEvent } from '@sim/types';
 import type { MatchTransport } from '@net/transport';
 import { LocalTransport } from '@net/transport';
 import type { BotController } from '@net/bot/botAI';
 
 /** Never simulate more than this many ticks in one frame. */
 const MAX_CATCHUP_TICKS = 6;
+
+/** Cap on unread sim events, so a backgrounded tab cannot grow the buffer. */
+const MAX_BUFFERED_EVENTS = 512;
 
 export interface InterpolatedPosition {
   x: number;
@@ -54,6 +57,7 @@ export class MatchRunner {
   /** Positions at the start of the current tick, for render interpolation. */
   private previous = new Map<number, InterpolatedPosition>();
   private pending: PendingCommand[] = [];
+  private eventBuffer: SimEvent[] = [];
 
   constructor(options: MatchRunnerOptions) {
     this.state = createMatch(options.config);
@@ -119,9 +123,29 @@ export class MatchRunner {
     this.snapshotPositions();
     stepMatch(this.state, frame.commands);
 
+    // Events live for exactly one tick, but a render frame may cover zero or
+    // two ticks. Buffering them here means effects are never dropped on a
+    // frame that happened not to advance the simulation, and never played
+    // twice on one that advanced it twice.
+    for (const event of this.state.events) this.eventBuffer.push(event);
+    if (this.eventBuffer.length > MAX_BUFFERED_EVENTS) {
+      this.eventBuffer.splice(0, this.eventBuffer.length - MAX_BUFFERED_EVENTS);
+    }
+
     if (this.pending.length > 0) {
       this.pending = this.pending.filter((p) => p.confirmTick > tick);
     }
+  }
+
+  /**
+   * Take every sim event since the last call. The renderer drains this once
+   * per frame to drive particles, sound and screen shake.
+   */
+  drainEvents(): SimEvent[] {
+    if (this.eventBuffer.length === 0) return [];
+    const events = this.eventBuffer;
+    this.eventBuffer = [];
+    return events;
   }
 
   private snapshotPositions(): void {
@@ -172,5 +196,6 @@ export class MatchRunner {
     this.transport.close();
     this.previous.clear();
     this.pending = [];
+    this.eventBuffer = [];
   }
 }

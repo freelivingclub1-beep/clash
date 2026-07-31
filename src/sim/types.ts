@@ -161,6 +161,8 @@ export interface PlayerState {
   deployRights: DeployRights;
   /** Aether spent this match — surfaced in the post-match summary. */
   aetherSpent: number;
+  /** Cards deployed this match, for the same summary. */
+  cardsPlayed: number;
 }
 
 export interface MatchState {

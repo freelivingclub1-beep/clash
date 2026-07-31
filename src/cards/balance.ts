@@ -482,6 +482,30 @@ export const SPELL_BREAKPOINTS: readonly SpellBreakpoint[] = [
     mustSurvive: [{ cardId: 'card_troop_musketeer', minHealthFraction: 0.3 }],
   },
   {
+    // Sunbeam is a tight burst: it clears the swarm tier like Arrows but over
+    // a much smaller radius, and must still leave a Musketeer standing or it
+    // would simply be a cheaper Fireball.
+    spellId: 'card_spell_sunbeam',
+    mustKill: [
+      'card_troop_skeletons',
+      'card_troop_goblins',
+      'card_troop_spear_goblins',
+      'card_troop_minions',
+      'card_troop_archers',
+    ],
+    mustSurvive: [{ cardId: 'card_troop_musketeer', minHealthFraction: 0.35 }],
+  },
+  {
+    // Glacier buys time rather than trading. It must not double as a cheap
+    // Arrows, so it is required to leave even Archers alive.
+    spellId: 'card_spell_glacier',
+    mustKill: ['card_troop_skeletons'],
+    mustSurvive: [
+      { cardId: 'card_troop_archers', minHealthFraction: 0.5 },
+      { cardId: 'card_troop_goblins', minHealthFraction: 0.3 },
+    ],
+  },
+  {
     spellId: 'card_spell_fireball',
     // Glass-cannon ranged troops must die; mini-tanks must live at roughly 40%.
     mustKill: ['card_troop_musketeer', 'card_troop_wizard', 'card_troop_archers'],

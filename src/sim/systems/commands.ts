@@ -95,6 +95,7 @@ function resolveDeploy(
 
   spendAether(player, card.aetherCost);
   cycleHand(player, command.handIndex);
+  player.cardsPlayed++;
 
   const evolved = consumeEvolution(player, cardId);
   const level = player.levels.get(cardId) ?? 11;
