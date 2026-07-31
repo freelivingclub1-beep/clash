@@ -1,0 +1,1 @@
+{"root":["./src/cards/registry.ts","./src/cards/scaling.ts","./src/cards/schema.ts","./src/cards/data/championsAndTowers.ts","./src/cards/data/index.ts","./src/cards/data/spellsAndBuildings.ts","./src/cards/data/troops.ts","./src/sim/constants.ts","./src/sim/math/fixed.ts","./src/sim/math/rng.ts","./tests/cards.test.ts","./vite.config.ts","./vitest.config.ts"],"version":"5.9.3"}
