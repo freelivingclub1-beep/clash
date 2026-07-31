@@ -10,7 +10,7 @@
 
 import { getCard } from '@cards/registry';
 import { fx } from '../math/fixed';
-import { EP_PER_ELIXIR, TICK_HZ } from '../constants';
+import { AP_PER_AETHER, TICK_HZ } from '../constants';
 import { canDeployAt } from '../nav/grid';
 import {
   findEntity,
@@ -21,9 +21,10 @@ import {
   spawnTroop,
   resolveStats,
 } from '../entities';
-import { canAfford, cycleHand, spendElixir, tileCenter } from '../state';
+import { canAfford, cycleHand, spendAether, tileCenter } from '../state';
 import { runAbility } from '../scripts/abilities';
 import { evolutionHooks } from '../scripts/evolutions';
+import { passiveHooks } from '../scripts/passives';
 import { type Command, type MatchState, type PlayerState, NO_TARGET } from '../types';
 
 function reject(state: MatchState, player: PlayerState, reason: string): void {
@@ -67,8 +68,8 @@ function resolveDeploy(
   const cardId = player.hand[command.handIndex];
   const card = getCard(cardId);
 
-  if (!canAfford(player, card.elixirCost)) {
-    reject(state, player, 'insufficient-elixir');
+  if (!canAfford(player, card.aetherCost)) {
+    reject(state, player, 'insufficient-aether');
     return;
   }
 
@@ -92,7 +93,7 @@ function resolveDeploy(
     return;
   }
 
-  spendElixir(player, card.elixirCost);
+  spendAether(player, card.aetherCost);
   cycleHand(player, command.handIndex);
 
   const evolved = consumeEvolution(player, cardId);
@@ -130,6 +131,7 @@ function resolveDeploy(
   }
 
   const hooks = evolved ? evolutionHooks(card.evoBehaviorScriptId) : undefined;
+  const passive = passiveHooks(card.passiveId);
   for (const [ox, oy] of formationOffsets(card.spawnCount)) {
     const entity = spawnTroop(
       state,
@@ -141,6 +143,9 @@ function resolveDeploy(
       center.y + oy + spawnJitter(state.simRng),
     );
     entity.goalTowerIndex = objectiveTowerIndex(state, command.team, entity.lane);
+    // Passive first, then the evolution hook: an evolved card should be able
+    // to stack its evolution shield on top of a passive one, not replace it.
+    passive?.onSpawn?.(state, entity, card.passiveMagnitude);
     hooks?.onSpawn?.(state, entity);
   }
 }
@@ -159,13 +164,13 @@ function resolveAbility(state: MatchState, team: 0 | 1): void {
   }
 
   const card = getCard(hero.cardId);
-  if (!canAfford(player, card.abilityElixirCost)) {
-    reject(state, player, 'insufficient-elixir');
+  if (!canAfford(player, card.abilityAetherCost)) {
+    reject(state, player, 'insufficient-aether');
     return;
   }
 
-  player.elixirPoints -= card.abilityElixirCost * EP_PER_ELIXIR;
-  player.elixirSpent += card.abilityElixirCost * EP_PER_ELIXIR;
+  player.aetherPoints -= card.abilityAetherCost * AP_PER_AETHER;
+  player.aetherSpent += card.abilityAetherCost * AP_PER_AETHER;
   player.heroAbilityCooldown = Math.round(card.abilityCooldown * TICK_HZ);
   runAbility(state, hero);
 }

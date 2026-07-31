@@ -94,6 +94,14 @@ export interface Entity {
   /** Entity forced to attack this one, for taunt effects. */
   tauntSourceId: number;
 
+  // --- passive scratch space -----------------------------------------------
+  /** Passive-specific counter: parry readiness, attack-ramp stacks. */
+  passiveCharges: number;
+  /** Passive-specific countdown, e.g. the parry cooldown. */
+  passiveTimer: number;
+  /** Last target seen by a passive, so attack ramp can detect a switch. */
+  passiveTargetId: number;
+
   // --- building ------------------------------------------------------------
   /** Ticks of life left; buildings self-destruct at 0. */
   lifetimeTicks: number;
@@ -120,8 +128,8 @@ export type MatchOutcome = 'ongoing' | 'blue' | 'red' | 'draw';
 
 export interface PlayerState {
   team: Team;
-  /** Integer elixir points; 84 points = 1 elixir. */
-  elixirPoints: number;
+  /** Integer aether points; 84 points = 1 aether. */
+  aetherPoints: number;
 
   /** The eight battle cards, in deck-slot order. */
   deck: string[];
@@ -149,8 +157,8 @@ export interface PlayerState {
   crowns: number;
   /** Which enemy lanes have opened up for forward deployment. */
   deployRights: DeployRights;
-  /** Elixir spent this match — surfaced in the post-match summary. */
-  elixirSpent: number;
+  /** Aether spent this match — surfaced in the post-match summary. */
+  aetherSpent: number;
 }
 
 export interface MatchState {

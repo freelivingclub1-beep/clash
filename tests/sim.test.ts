@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import '@cards/data';
 import { STARTER_DECK, BOT_DECK } from '@cards/data';
-import { createMatch, elixirOf, type MatchConfig } from '@sim/state';
+import { createMatch, aetherOf, type MatchConfig } from '@sim/state';
 import { stepMatch, stepMatchBy, hashMatchState } from '@sim/tick';
 import { fxToFloat, fx } from '@sim/math/fixed';
 import {
@@ -14,13 +14,13 @@ import {
   laneForX,
 } from '@sim/nav/grid';
 import {
-  EP_PER_ELIXIR,
-  MAX_ELIXIR_POINTS,
-  DOUBLE_ELIXIR_TICK,
-  TRIPLE_ELIXIR_TICK,
-  STARTING_ELIXIR_POINTS,
+  AP_PER_AETHER,
+  MAX_AETHER_POINTS,
+  DOUBLE_AETHER_TICK,
+  TRIPLE_AETHER_TICK,
+  STARTING_AETHER_POINTS,
 } from '@sim/constants';
-import { elixirGainAtTick, elixirMultiplierAtTick } from '@sim/systems/clock';
+import { aetherGainAtTick, aetherMultiplierAtTick } from '@sim/systems/clock';
 import type { Command, MatchState } from '@sim/types';
 
 const config = (): MatchConfig => ({
@@ -73,62 +73,62 @@ describe('match setup', () => {
     );
   });
 
-  it('starts both players at five elixir', () => {
+  it('starts both players at five aether', () => {
     const state = createMatch(config());
-    expect(state.players[BLUE].elixirPoints).toBe(STARTING_ELIXIR_POINTS);
-    expect(elixirOf(state.players[BLUE])).toBe(5);
+    expect(state.players[BLUE].aetherPoints).toBe(STARTING_AETHER_POINTS);
+    expect(aetherOf(state.players[BLUE])).toBe(5);
   });
 });
 
-describe('elixir engine', () => {
+describe('aether engine', () => {
   it('uses the exact tick rates the spec implies', () => {
-    // 1 elixir per 2.8s / 1.4s / 0.7s is 84 / 42 / 21 ticks at 30Hz.
-    expect(EP_PER_ELIXIR / elixirGainAtTick(0)).toBe(84);
-    expect(EP_PER_ELIXIR / elixirGainAtTick(DOUBLE_ELIXIR_TICK)).toBe(42);
-    expect(EP_PER_ELIXIR / elixirGainAtTick(TRIPLE_ELIXIR_TICK)).toBe(21);
-    expect(elixirMultiplierAtTick(0)).toBe(1);
-    expect(elixirMultiplierAtTick(DOUBLE_ELIXIR_TICK)).toBe(2);
-    expect(elixirMultiplierAtTick(TRIPLE_ELIXIR_TICK)).toBe(3);
+    // 1 aether per 2.8s / 1.4s / 0.7s is 84 / 42 / 21 ticks at 30Hz.
+    expect(AP_PER_AETHER / aetherGainAtTick(0)).toBe(84);
+    expect(AP_PER_AETHER / aetherGainAtTick(DOUBLE_AETHER_TICK)).toBe(42);
+    expect(AP_PER_AETHER / aetherGainAtTick(TRIPLE_AETHER_TICK)).toBe(21);
+    expect(aetherMultiplierAtTick(0)).toBe(1);
+    expect(aetherMultiplierAtTick(DOUBLE_AETHER_TICK)).toBe(2);
+    expect(aetherMultiplierAtTick(TRIPLE_AETHER_TICK)).toBe(3);
   });
 
-  it('regenerates exactly one elixir every 84 ticks at single rate', () => {
+  it('regenerates exactly one aether every 84 ticks at single rate', () => {
     const state = createMatch(config());
-    const before = state.players[BLUE].elixirPoints;
+    const before = state.players[BLUE].aetherPoints;
     stepMatchBy(state, 84);
-    expect(state.players[BLUE].elixirPoints).toBe(before + EP_PER_ELIXIR);
+    expect(state.players[BLUE].aetherPoints).toBe(before + AP_PER_AETHER);
   });
 
-  it('caps at ten elixir and discards the overflow', () => {
+  it('caps at ten aether and discards the overflow', () => {
     const state = createMatch(config());
     stepMatchBy(state, 2000);
-    expect(state.players[BLUE].elixirPoints).toBe(MAX_ELIXIR_POINTS);
-    expect(elixirOf(state.players[BLUE])).toBe(10);
+    expect(state.players[BLUE].aetherPoints).toBe(MAX_AETHER_POINTS);
+    expect(aetherOf(state.players[BLUE])).toBe(10);
   });
 
   it('charges the card cost and cycles the hand on a legal deploy', () => {
     const state = createMatch(config());
-    stepMatchBy(state, 300); // bank some elixir
+    stepMatchBy(state, 300); // bank some aether
 
     const player = state.players[BLUE];
     const played = player.hand[0];
     const nextUp = player.queue[0];
-    const before = player.elixirPoints;
+    const before = player.aetherPoints;
 
     stepMatch(state, [deploy(BLUE, 0, 8, 10)]);
 
     expect(player.hand[0]).toBe(nextUp);
     expect(player.queue[player.queue.length - 1]).toBe(played);
-    expect(player.elixirPoints).toBeLessThan(before);
+    expect(player.aetherPoints).toBeLessThan(before);
   });
 
   it('rejects a deploy the player cannot afford', () => {
     const state = createMatch(config());
     const player = state.players[BLUE];
-    player.elixirPoints = 0;
+    player.aetherPoints = 0;
 
     stepMatch(state, [deploy(BLUE, 0, 8, 10)]);
 
-    expect(player.elixirPoints).toBe(elixirGainAtTick(0));
+    expect(player.aetherPoints).toBe(aetherGainAtTick(0));
     expect(state.events.some((e) => e.type === 'deployRejected')).toBe(true);
   });
 });

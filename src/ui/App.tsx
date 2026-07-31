@@ -153,8 +153,8 @@ export function App() {
               </span>
             </div>
             <div className="stat-line">
-              <span className="label">Deck average elixir</span>
-              <span>{deckValidation.averageElixir}</span>
+              <span className="label">Deck average aether</span>
+              <span>{deckValidation.averageAether}</span>
             </div>
           </div>
 

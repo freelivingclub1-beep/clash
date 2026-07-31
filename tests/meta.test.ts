@@ -5,7 +5,7 @@ import { getCard } from '@cards/registry';
 import { createMatch, forceSpawn, type MatchConfig } from '@sim/state';
 import { stepMatch, stepMatchBy } from '@sim/tick';
 import { BLUE, RED } from '@sim/nav/grid';
-import { EP_PER_ELIXIR, TICK_HZ } from '@sim/constants';
+import { AP_PER_AETHER, TICK_HZ } from '@sim/constants';
 import { findEntity, resolveStats } from '@sim/entities';
 import { hasAbilityHook } from '@sim/scripts/abilities';
 import { hasEvolutionScript } from '@sim/scripts/evolutions';
@@ -27,7 +27,7 @@ const config = (): MatchConfig => ({
 function playCard(state: MatchState, cardId: string, tileX = 8, tileY = 10): void {
   const player = state.players[BLUE];
   player.hand[0] = cardId;
-  player.elixirPoints = 10 * EP_PER_ELIXIR;
+  player.aetherPoints = 10 * AP_PER_AETHER;
   const command: Command = { type: 'deploy', team: BLUE, handIndex: 0, tileX, tileY };
   stepMatch(state, [command]);
 }
@@ -112,44 +112,44 @@ describe('hero abilities', () => {
     expect(state.players[BLUE].heroAbilityCooldown).toBe(0);
   });
 
-  it('charges elixir and starts the cooldown when the ability fires', () => {
+  it('charges aether and starts the cooldown when the ability fires', () => {
     const state = createMatch(config());
     deployHero(state);
     // Give the dash something to reach.
     forceSpawn(state, RED, 'card_troop_musketeer', 8, 14);
 
     const player = state.players[BLUE];
-    player.elixirPoints = 10 * EP_PER_ELIXIR;
+    player.aetherPoints = 10 * AP_PER_AETHER;
     const card = getCard('card_troop_golden_knight');
 
     stepMatch(state, [{ type: 'ability', team: BLUE }]);
 
     expect(player.heroAbilityCooldown).toBeGreaterThan(0);
-    expect(player.elixirPoints).toBeLessThan(10 * EP_PER_ELIXIR);
+    expect(player.aetherPoints).toBeLessThan(10 * AP_PER_AETHER);
     expect(state.events.some((e) => e.type === 'ability')).toBe(true);
-    expect(card.abilityElixirCost).toBeGreaterThan(0);
+    expect(card.abilityAetherCost).toBeGreaterThan(0);
   });
 
   it('refuses the ability while it is on cooldown', () => {
     const state = createMatch(config());
     deployHero(state);
     forceSpawn(state, RED, 'card_troop_musketeer', 8, 14);
-    state.players[BLUE].elixirPoints = 10 * EP_PER_ELIXIR;
+    state.players[BLUE].aetherPoints = 10 * AP_PER_AETHER;
 
     stepMatch(state, [{ type: 'ability', team: BLUE }]);
-    const afterFirst = state.players[BLUE].elixirPoints;
+    const afterFirst = state.players[BLUE].aetherPoints;
 
     stepMatch(state, [{ type: 'ability', team: BLUE }]);
     expect(
       state.events.some((e) => e.type === 'deployRejected' && e.reason === 'ability-on-cooldown'),
     ).toBe(true);
     // Only the first activation was paid for (modulo one tick of regeneration).
-    expect(state.players[BLUE].elixirPoints).toBeGreaterThanOrEqual(afterFirst);
+    expect(state.players[BLUE].aetherPoints).toBeGreaterThanOrEqual(afterFirst);
   });
 
   it('rejects the ability outright when no hero is deployed', () => {
     const state = createMatch(config());
-    state.players[BLUE].elixirPoints = 10 * EP_PER_ELIXIR;
+    state.players[BLUE].aetherPoints = 10 * AP_PER_AETHER;
     stepMatch(state, [{ type: 'ability', team: BLUE }]);
     expect(
       state.events.some((e) => e.type === 'deployRejected' && e.reason === 'no-hero-on-field'),
@@ -191,7 +191,7 @@ describe('hero abilities', () => {
     const attacker = forceSpawn(state, RED, 'card_troop_musketeer', 8, 13);
     attacker.targetId = queen!.id;
 
-    state.players[BLUE].elixirPoints = 10 * EP_PER_ELIXIR;
+    state.players[BLUE].aetherPoints = 10 * AP_PER_AETHER;
     stepMatch(state, [{ type: 'ability', team: BLUE }]);
 
     expect(queen!.invisibleTicks).toBeGreaterThan(0);
@@ -297,10 +297,10 @@ describe('deck rules', () => {
     );
   });
 
-  it('computes average elixir across the eight battle cards only', () => {
+  it('computes average aether across the eight battle cards only', () => {
     const expected =
-      STARTER_DECK.slice(0, 8).reduce((sum, id) => sum + getCard(id).elixirCost, 0) / 8;
-    expect(validateDeck(STARTER_DECK).averageElixir).toBeCloseTo(
+      STARTER_DECK.slice(0, 8).reduce((sum, id) => sum + getCard(id).aetherCost, 0) / 8;
+    expect(validateDeck(STARTER_DECK).averageAether).toBeCloseTo(
       Math.round(expected * 10) / 10,
       5,
     );

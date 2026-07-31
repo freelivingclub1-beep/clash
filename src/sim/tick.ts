@@ -5,7 +5,7 @@
  * below is load-bearing for determinism and for correctness — a few notes on
  * why each neighbour pairing is where it is:
  *
- *   commands before elixir   a card played this tick is paid for at this
+ *   commands before aether   a card played this tick is paid for at this
  *                            tick's balance, not after the tick's income
  *   targeting before steering steering needs a settled target to seek
  *   steering before movement  every step is decided from the same snapshot
@@ -16,12 +16,13 @@
  */
 
 import { resolveCommands } from './systems/commands';
-import { elixirTick, matchClock } from './systems/clock';
+import { aetherTick, matchClock } from './systems/clock';
 import { targetAcquisition } from './systems/targeting';
 import { steering, movement } from './systems/movement';
 import { combat } from './systems/combat';
 import { projectiles } from './systems/projectiles';
 import { statusEffects } from './systems/status';
+import { passiveTick } from './scripts/passives';
 import { deaths, buildingDecay, compact } from './systems/deaths';
 import { towerState } from './systems/towers';
 import type { Command, MatchState } from './types';
@@ -42,7 +43,7 @@ export function stepMatch(state: MatchState, commands: readonly Command[] = NO_C
   if (state.phase === 'finished') return;
 
   resolveCommands(state, commands);
-  elixirTick(state);
+  aetherTick(state);
 
   targetAcquisition(state);
   steering(state);
@@ -52,6 +53,9 @@ export function stepMatch(state: MatchState, commands: readonly Command[] = NO_C
   projectiles(state);
 
   statusEffects(state);
+  // Auras run after status expiry so a slow aura re-applies the same tick it
+  // would otherwise lapse, rather than flickering off for one frame.
+  passiveTick(state);
 
   buildingDecay(state);
   deaths(state);
@@ -103,11 +107,12 @@ export function hashMatchState(state: MatchState): number {
     fold(entity.freezeTicks + entity.stunTicks * 7 + entity.slowTicks * 13);
     fold(entity.rageTicks + entity.poisonTicks * 7 + entity.invisibleTicks * 13);
     fold(entity.goalTowerIndex);
+    fold(entity.passiveCharges + entity.passiveTimer * 7 + entity.passiveTargetId * 13);
     fold(entity.alive ? 1 : 0);
   }
 
   for (const player of state.players) {
-    fold(player.elixirPoints);
+    fold(player.aetherPoints);
     fold(player.crowns);
     fold(player.heroEntityId);
     fold(player.heroAbilityCooldown);

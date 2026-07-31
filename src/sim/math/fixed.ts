@@ -8,7 +8,7 @@
  * Quantities that are *not* fixed-point, by deliberate choice:
  *   - health / damage / shield : plain integers (HP points). At Q16.16 a
  *     100k-HP tower would overflow int32.
- *   - elixir                   : plain integer milli-elixir, 0..10000.
+ *   - aether                   : plain integer milli-aether, 0..10000.
  *   - time                     : plain integer ticks.
  *
  * Products stay well under 2^53 for our magnitude range (positions cap at 32

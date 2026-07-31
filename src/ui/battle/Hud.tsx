@@ -9,7 +9,7 @@
 
 import { type CardDefinition } from '@cards/schema';
 import { tryGetCard } from '@cards/registry';
-import { EP_PER_ELIXIR, MAX_ELIXIR_POINTS, TICK_HZ } from '@sim/constants';
+import { AP_PER_AETHER, MAX_AETHER_POINTS, TICK_HZ } from '@sim/constants';
 import { REGULATION_END_TICK, MATCH_END_TICK } from '@sim/constants';
 
 // ---------------------------------------------------------------------------
@@ -47,27 +47,27 @@ export function CrownCounter({ crowns, side }: { crowns: number; side: 'blue' | 
 }
 
 // ---------------------------------------------------------------------------
-// Elixir
+// Aether
 // ---------------------------------------------------------------------------
 
-export function ElixirBar({ points, multiplier }: { points: number; multiplier: number }) {
-  const elixir = points / EP_PER_ELIXIR;
+export function AetherBar({ points, multiplier }: { points: number; multiplier: number }) {
+  const aether = points / AP_PER_AETHER;
   return (
-    <div className="elixir-row">
-      <span className="elixir-value">{elixir.toFixed(1)}</span>
-      <div className="elixir-bar">
+    <div className="aether-row">
+      <span className="aether-value">{aether.toFixed(1)}</span>
+      <div className="aether-bar">
         {Array.from({ length: 10 }, (_, i) => {
-          // Each cell is one whole elixir; the active one fills fractionally.
-          const fill = Math.max(0, Math.min(1, elixir - i));
+          // Each cell is one whole aether; the active one fills fractionally.
+          const fill = Math.max(0, Math.min(1, aether - i));
           return (
-            <div key={i} className="elixir-cell">
-              <div className="elixir-fill" style={{ width: `${fill * 100}%` }} />
+            <div key={i} className="aether-cell">
+              <div className="aether-fill" style={{ width: `${fill * 100}%` }} />
             </div>
           );
         })}
       </div>
       {multiplier > 1 && (
-        <span className="elixir-value" style={{ color: 'var(--gold)' }}>
+        <span className="aether-value" style={{ color: 'var(--gold)' }}>
           x{multiplier}
         </span>
       )}
@@ -75,7 +75,7 @@ export function ElixirBar({ points, multiplier }: { points: number; multiplier: 
   );
 }
 
-export const MAX_ELIXIR_DISPLAY = MAX_ELIXIR_POINTS / EP_PER_ELIXIR;
+export const MAX_AETHER_DISPLAY = MAX_AETHER_POINTS / AP_PER_AETHER;
 
 // ---------------------------------------------------------------------------
 // Cards
@@ -113,7 +113,7 @@ export function CardTile({
         {card.name}
       </div>
       {evolutionReady && <span className="evo-badge">EVO</span>}
-      <span className="card-cost">{card.elixirCost}</span>
+      <span className="card-cost">{card.aetherCost}</span>
     </div>
   );
 }
@@ -160,7 +160,7 @@ export function AbilityButton({
       title={`${hero.name}: ${hero.abilityActionHook}`}
     >
       <span>{label}</span>
-      {onField && cooldownSeconds <= 0 && <span className="cost">{hero.abilityElixirCost}</span>}
+      {onField && cooldownSeconds <= 0 && <span className="cost">{hero.abilityAetherCost}</span>}
     </button>
   );
 }

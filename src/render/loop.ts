@@ -36,7 +36,7 @@ export interface DragState {
 
 export interface HudSnapshot {
   tick: number;
-  elixir: number;
+  aether: number;
   crownsBlue: number;
   crownsRed: number;
   phase: string;
@@ -158,7 +158,7 @@ export class BattleRenderer {
     const local = state.players[this.runner.localTeam];
     this.onHud({
       tick: state.tick,
-      elixir: local.elixirPoints,
+      aether: local.aetherPoints,
       crownsBlue: state.players[0].crowns,
       crownsRed: state.players[1].crowns,
       phase: state.phase,

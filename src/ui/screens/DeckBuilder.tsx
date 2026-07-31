@@ -58,7 +58,7 @@ export function DeckBuilder({ profile, onSave, onBack }: DeckBuilderProps) {
       <div className="screen">
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <h2>Battle Deck</h2>
-          <span className="muted">Avg elixir {validation.averageElixir}</span>
+          <span className="muted">Avg aether {validation.averageAether}</span>
         </div>
 
         <div className="deck-grid">
@@ -83,7 +83,7 @@ export function DeckBuilder({ profile, onSave, onBack }: DeckBuilderProps) {
                   <>
                     <strong>{card.name}</strong>
                     <span>
-                      {card.elixirCost} · lvl {entry?.level ?? 11}
+                      {card.aetherCost} · lvl {entry?.level ?? 11}
                     </span>
                   </>
                 ) : (
@@ -121,7 +121,7 @@ export function DeckBuilder({ profile, onSave, onBack }: DeckBuilderProps) {
                   onClick={() => assign(card.id)}
                 >
                   <strong>{card.name}</strong>
-                  <span>{card.elixirCost}</span>
+                  <span>{card.aetherCost}</span>
                 </div>
               ))}
             </div>

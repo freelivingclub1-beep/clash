@@ -1,18 +1,18 @@
 /**
- * Elixir generation and the match clock.
+ * Aether generation and the match clock.
  *
- * Elixir is integer "elixir points" — 84 to the elixir — chosen so the spec's
+ * Aether is integer "aether points" — 84 to the aether — chosen so the spec's
  * 2.8s / 1.4s / 0.7s rates land on exactly 1, 2 and 4 points per tick at 30Hz.
  * No accumulator, no remainder, no drift over a five-minute match.
  */
 
 import {
-  DOUBLE_ELIXIR_TICK,
-  TRIPLE_ELIXIR_TICK,
-  EP_GAIN_SINGLE,
-  EP_GAIN_DOUBLE,
-  EP_GAIN_TRIPLE,
-  MAX_ELIXIR_POINTS,
+  DOUBLE_AETHER_TICK,
+  TRIPLE_AETHER_TICK,
+  AP_GAIN_SINGLE,
+  AP_GAIN_DOUBLE,
+  AP_GAIN_TRIPLE,
+  MAX_AETHER_POINTS,
   REGULATION_END_TICK,
   MATCH_END_TICK,
 } from '../constants';
@@ -20,27 +20,27 @@ import { BLUE, RED } from '../nav/grid';
 import { kingTowerAlive, lowestTowerHealth } from './towers';
 import type { MatchState } from '../types';
 
-/** Elixir points generated per tick at the current point in the match. */
-export function elixirGainAtTick(tick: number): number {
-  if (tick >= TRIPLE_ELIXIR_TICK) return EP_GAIN_TRIPLE;
-  if (tick >= DOUBLE_ELIXIR_TICK) return EP_GAIN_DOUBLE;
-  return EP_GAIN_SINGLE;
+/** Aether points generated per tick at the current point in the match. */
+export function aetherGainAtTick(tick: number): number {
+  if (tick >= TRIPLE_AETHER_TICK) return AP_GAIN_TRIPLE;
+  if (tick >= DOUBLE_AETHER_TICK) return AP_GAIN_DOUBLE;
+  return AP_GAIN_SINGLE;
 }
 
 /** Human-readable multiplier, for the HUD. */
-export function elixirMultiplierAtTick(tick: number): 1 | 2 | 3 {
-  if (tick >= TRIPLE_ELIXIR_TICK) return 3;
-  if (tick >= DOUBLE_ELIXIR_TICK) return 2;
+export function aetherMultiplierAtTick(tick: number): 1 | 2 | 3 {
+  if (tick >= TRIPLE_AETHER_TICK) return 3;
+  if (tick >= DOUBLE_AETHER_TICK) return 2;
   return 1;
 }
 
-export function elixirTick(state: MatchState): void {
+export function aetherTick(state: MatchState): void {
   if (state.phase === 'finished') return;
-  const gain = elixirGainAtTick(state.tick);
+  const gain = aetherGainAtTick(state.tick);
 
   for (const player of state.players) {
     // Generation above the cap is discarded permanently, not banked.
-    player.elixirPoints = Math.min(MAX_ELIXIR_POINTS, player.elixirPoints + gain);
+    player.aetherPoints = Math.min(MAX_AETHER_POINTS, player.aetherPoints + gain);
   }
 }
 

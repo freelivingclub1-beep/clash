@@ -46,6 +46,9 @@ export function projectiles(state: MatchState): void {
     projectile.y = projectile.destY;
 
     const stats = resolveStats(projectile.cardId, projectile.level, projectile.evolved);
+    // The shooter may have died mid-flight; passing it when it still exists is
+    // what lets reflect and chain resolve against the real attacker.
+    const shooter = findEntity(state, projectile.sourceId);
     applyDamageAtPoint(
       state,
       projectile.team,
@@ -56,6 +59,7 @@ export function projectiles(state: MatchState): void {
       stats.card,
       stats.statusTicks,
       projectile.targetId,
+      shooter?.alive ? shooter : undefined,
     );
 
     projectile.alive = false;

@@ -21,6 +21,7 @@ import {
 } from './constants';
 import { type Team, type Lane, laneForX, TOWER_LAYOUTS, enemyOf } from './nav/grid';
 import { type Entity, type MatchState, NO_TARGET } from './types';
+import { passiveHooks } from './scripts/passives';
 
 export interface ResolvedStats {
   card: CardDefinition;
@@ -144,6 +145,9 @@ function blankEntity(id: number, team: Team, kind: Entity['kind']): Entity {
     abilityTicks: 0,
     invisibleTicks: 0,
     tauntSourceId: NO_TARGET,
+    passiveCharges: 0,
+    passiveTimer: 0,
+    passiveTargetId: NO_TARGET,
     lifetimeTicks: 0,
     towerIndex: -1,
     dormant: false,
@@ -379,7 +383,12 @@ export function spawnJitter(rng: Rng): Fx {
  * deaths are picked up by the deaths system so death effects resolve in a
  * single, ordered place.
  */
-export function applyDamage(state: MatchState, target: Entity, amount: number): number {
+export function applyDamage(
+  state: MatchState,
+  target: Entity,
+  amount: number,
+  attacker?: Entity,
+): number {
   if (!target.alive || amount <= 0) return 0;
 
   let remaining = amount;
@@ -400,6 +409,19 @@ export function applyDamage(state: MatchState, target: Entity, amount: number): 
     target.hp = 0;
     target.alive = false;
     state.needsCompaction = true;
+    return dealt;
+  }
+
+  // Reactive passives — reflect, parry — fire only on a survivor, and only
+  // when the damage came from an identifiable attacker. Spells and decay have
+  // nobody to answer, which is deliberate: they are the counterplay.
+  if (dealt > 0 && attacker) {
+    const hooks = passiveHooks(resolveStats(target.cardId, target.level, target.evolved).card.passiveId);
+    if (hooks?.onDamaged) {
+      const magnitude = resolveStats(target.cardId, target.level, target.evolved).card
+        .passiveMagnitude;
+      hooks.onDamaged(state, target, attacker, dealt, magnitude);
+    }
   }
   return dealt;
 }

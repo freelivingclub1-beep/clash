@@ -19,6 +19,8 @@ import {
   resolveStats,
 } from '../entities';
 import { evolutionHooks } from '../scripts/evolutions';
+import { passiveHooks } from '../scripts/passives';
+import { crownTowerDamage } from '@cards/balance';
 import type { CardDefinition } from '@cards/schema';
 import { type Entity, type MatchState, NO_TARGET } from '../types';
 
@@ -80,6 +82,20 @@ export function applyStatus(card: CardDefinition, victim: Entity, ticks: number)
  * Deal `damage` at a point, to every enemy of `team` inside `radius`.
  * A radius of 0 means the primary target only.
  */
+/**
+ * Damage a tower actually takes from this source.
+ *
+ * Direct spell damage against Crown Towers is capped at a third of its troop
+ * damage. Without that cap the strongest deck in the game is four damage
+ * spells cycled at the tower, which needs no board play and cannot be
+ * interacted with.
+ */
+function damageAgainst(target: Entity, damage: number, card: CardDefinition): number {
+  if (target.kind !== 'tower') return damage;
+  if (card.category !== 'Spell') return damage;
+  return crownTowerDamage(damage);
+}
+
 export function applyDamageAtPoint(
   state: MatchState,
   team: Entity['team'],
@@ -90,14 +106,17 @@ export function applyDamageAtPoint(
   card: CardDefinition,
   statusTicks: number,
   primaryId: number,
+  attacker?: Entity,
 ): void {
   const foe = enemyOf(team);
+  const passive = passiveHooks(card.passiveId);
 
   if (radius <= 0) {
     const primary = findEntity(state, primaryId);
     if (isTargetable(primary) && primary.team === foe) {
-      applyDamage(state, primary, damage);
+      applyDamage(state, primary, damageAgainst(primary, damage, card), attacker);
       if (card.onHitStatus !== 'None') applyStatus(card, primary, statusTicks);
+      if (attacker) passive?.onHit?.(state, attacker, primary, card.passiveMagnitude);
       state.events.push({ type: 'hit', x, y, damage, splash: false });
     }
     return;
@@ -110,8 +129,13 @@ export function applyDamageAtPoint(
     // attack must not clip flying units caught in the blast.
     if (!canTarget(card.targetPriority, entity) && entity.id !== primaryId) continue;
     if (fxLenSq(entity.x - x, entity.y - y) > radiusSq) continue;
-    applyDamage(state, entity, damage);
+    applyDamage(state, entity, damageAgainst(entity, damage, card), attacker);
     if (card.onHitStatus !== 'None') applyStatus(card, entity, statusTicks);
+    // The passive fires once, on the intended target, not once per unit caught
+    // in the splash — otherwise a chain passive squared itself on a swarm.
+    if (attacker && entity.id === primaryId) {
+      passive?.onHit?.(state, attacker, entity, card.passiveMagnitude);
+    }
   }
   state.events.push({ type: 'hit', x, y, damage, splash: true });
 }
@@ -156,6 +180,12 @@ export function combat(state: MatchState): void {
     }
     // Archer Queen's cloak doubles her rate of fire while it lasts.
     if (entity.invisibleTicks > 0) cooldown = Math.max(1, Math.round(cooldown / 2));
+    // Attack-ramp stacks each shave a tick off the next swing. Floored at
+    // half the base cooldown so a long channel accelerates but never becomes
+    // an instant-damage beam.
+    if (card.passiveId === 'attack_ramp' && entity.passiveCharges > 0) {
+      cooldown = Math.max(Math.ceil(stats.hitCooldown / 2), cooldown - entity.passiveCharges);
+    }
     entity.attackCooldown = cooldown;
 
     const hooks = entity.evolved ? evolutionHooks(card.evoBehaviorScriptId) : undefined;
@@ -180,6 +210,7 @@ export function combat(state: MatchState): void {
         card,
         stats.statusTicks,
         target.id,
+        entity,
       );
     }
 

@@ -79,7 +79,7 @@ export function deckLevelAverage(deck: string[], cardLevels: Record<string, numb
 const BOT_NAMES = [
   'IronBarbarian',
   'HogCommander',
-  'ElixirGolem',
+  'AetherGolem',
   'ArenaWraith',
   'CrownChaser',
   'BridgeSpammer',

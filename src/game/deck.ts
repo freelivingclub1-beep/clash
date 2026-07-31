@@ -68,8 +68,8 @@ export interface DeckIssue {
 export interface DeckValidation {
   ok: boolean;
   issues: DeckIssue[];
-  /** Average elixir across the eight battle cards, to one decimal. */
-  averageElixir: number;
+  /** Average aether across the eight battle cards, to one decimal. */
+  averageAether: number;
 }
 
 export function validateDeck(deck: readonly string[]): DeckValidation {
@@ -77,11 +77,11 @@ export function validateDeck(deck: readonly string[]): DeckValidation {
 
   if (deck.length !== FULL_DECK_SIZE) {
     issues.push({ slot: -1, message: `A deck holds exactly ${FULL_DECK_SIZE} cards.` });
-    return { ok: false, issues, averageElixir: 0 };
+    return { ok: false, issues, averageAether: 0 };
   }
 
   const seen = new Map<string, number>();
-  let elixirTotal = 0;
+  let aetherTotal = 0;
   let battleCardCount = 0;
 
   for (const slot of DECK_LAYOUT) {
@@ -109,7 +109,7 @@ export function validateDeck(deck: readonly string[]): DeckValidation {
     seen.set(cardId, slot.index);
 
     if (slot.index < BATTLE_DECK_SIZE) {
-      elixirTotal += card.elixirCost;
+      aetherTotal += card.aetherCost;
       battleCardCount++;
       // Champions are confined to the hero and wild slots.
       if (card.isHero && slot.role !== 'hero' && slot.role !== 'wild') {
@@ -124,7 +124,7 @@ export function validateDeck(deck: readonly string[]): DeckValidation {
   return {
     ok: issues.length === 0,
     issues,
-    averageElixir: battleCardCount > 0 ? Math.round((elixirTotal / battleCardCount) * 10) / 10 : 0,
+    averageAether: battleCardCount > 0 ? Math.round((aetherTotal / battleCardCount) * 10) / 10 : 0,
   };
 }
 

@@ -8,7 +8,7 @@
  * Vertical bands, per spec §1:
  *   0-10%    header   — tower health, timer, opponent
  *   10-75%   field    — the 18x32 arena
- *   75-100%  hud      — hand, elixir, ability button
+ *   75-100%  hud      — hand, aether, ability button
  *
  * The field band is 1080x1248 for an 18x32 grid, so tiles cannot be square:
  * 60 wide by 39 tall. That ~0.65 vertical squash is deliberate — it is the

@@ -14,7 +14,7 @@
 import { getCard } from '@cards/registry';
 import { createRng, nextInt, nextRange, type Rng } from '@sim/math/rng';
 import { fxToFloat } from '@sim/math/fixed';
-import { LANE_SPLIT_X, EP_PER_ELIXIR } from '@sim/constants';
+import { LANE_SPLIT_X, AP_PER_AETHER } from '@sim/constants';
 import { type Team, enemyOf, canDeployAt } from '@sim/nav/grid';
 import { findEntity } from '@sim/entities';
 import type { Command, Entity, MatchState } from '@sim/types';
@@ -23,7 +23,7 @@ import type { Command, Entity, MatchState } from '@sim/types';
 const DECISION_INTERVAL_TICKS = 15;
 
 /** Below this the bot holds; it should not dribble single cards away. */
-const MIN_ATTACK_ELIXIR = 6;
+const MIN_ATTACK_AETHER = 6;
 
 export interface BotOptions {
   team: Team;
@@ -57,23 +57,23 @@ export class BotController {
     if (state.tick % DECISION_INTERVAL_TICKS !== 0) return [];
 
     const player = state.players[this.team];
-    const elixir = player.elixirPoints / EP_PER_ELIXIR;
+    const aether = player.aetherPoints / AP_PER_AETHER;
 
-    const ability = this.maybeUseAbility(state, elixir);
+    const ability = this.maybeUseAbility(state, aether);
     if (ability) return [ability];
 
     const threat = this.biggestThreat(state);
     if (threat) {
-      const defence = this.playDefence(state, threat, elixir);
+      const defence = this.playDefence(state, threat, aether);
       if (defence) return [defence];
     }
 
-    return this.maybeAttack(state, elixir);
+    return this.maybeAttack(state, aether);
   }
 
   // -------------------------------------------------------------------------
 
-  private maybeUseAbility(state: MatchState, elixir: number): Command | null {
+  private maybeUseAbility(state: MatchState, aether: number): Command | null {
     const player = state.players[this.team];
     if (player.heroAbilityCooldown > 0) return null;
 
@@ -81,7 +81,7 @@ export class BotController {
     if (!hero || !hero.alive || hero.deployTimer > 0) return null;
 
     const card = getCard(hero.cardId);
-    if (elixir < card.abilityElixirCost) return null;
+    if (aether < card.abilityAetherCost) return null;
 
     // Only worth spending on if something is actually near the hero.
     const foe = enemyOf(this.team);
@@ -118,7 +118,7 @@ export class BotController {
     return best;
   }
 
-  private playDefence(state: MatchState, threat: Threat, elixir: number): Command | null {
+  private playDefence(state: MatchState, threat: Threat, aether: number): Command | null {
     const player = state.players[this.team];
 
     // Pick the most expensive affordable answer that can actually hit it.
@@ -126,7 +126,7 @@ export class BotController {
     let bestCost = -1;
     for (let i = 0; i < player.hand.length; i++) {
       const card = getCard(player.hand[i]);
-      if (card.elixirCost > elixir) continue;
+      if (card.aetherCost > aether) continue;
       if (card.category === 'Spell') {
         // Only worth a spell if the threat is a swarm or already committed.
         if (threat.depth < 3) continue;
@@ -135,8 +135,8 @@ export class BotController {
       } else if (card.targetPriority === 'Buildings') {
         continue; // win conditions are for attacking, not defending
       }
-      if (card.elixirCost > bestCost) {
-        bestCost = card.elixirCost;
+      if (card.aetherCost > bestCost) {
+        bestCost = card.aetherCost;
         bestIndex = i;
       }
     }
@@ -164,16 +164,16 @@ export class BotController {
     };
   }
 
-  private maybeAttack(state: MatchState, elixir: number): Command[] {
+  private maybeAttack(state: MatchState, aether: number): Command[] {
     const player = state.players[this.team];
 
-    // Hold until there is enough elixir for a push, scaled by aggression.
-    const threshold = MIN_ATTACK_ELIXIR + (1 - this.aggression) * 3;
-    if (elixir < threshold) return [];
+    // Hold until there is enough aether for a push, scaled by aggression.
+    const threshold = MIN_ATTACK_AETHER + (1 - this.aggression) * 3;
+    if (aether < threshold) return [];
 
     const affordable: number[] = [];
     for (let i = 0; i < player.hand.length; i++) {
-      if (getCard(player.hand[i]).elixirCost <= elixir) affordable.push(i);
+      if (getCard(player.hand[i]).aetherCost <= aether) affordable.push(i);
     }
     if (affordable.length === 0) return [];
 

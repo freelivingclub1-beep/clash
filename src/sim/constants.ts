@@ -1,7 +1,7 @@
 /**
  * Arena geometry, clock, and economy constants.
  *
- * Everything here is expressed in the sim's own units — ticks, tiles, elixir
+ * Everything here is expressed in the sim's own units — ticks, tiles, aether
  * points — never seconds or pixels. Conversion to wall-clock and screen space
  * happens exclusively on the render side.
  */
@@ -24,31 +24,31 @@ export const REGULATION_END_TICK = secondsToTicks(180); // 5400
 /** Regulation + 2:00 of sudden-death overtime. */
 export const MATCH_END_TICK = secondsToTicks(300); // 9000
 
-/** Elixir rate boundaries, per spec §5: 1x until 2:00, 2x until 4:00, 3x after. */
-export const DOUBLE_ELIXIR_TICK = secondsToTicks(120); // 3600
-export const TRIPLE_ELIXIR_TICK = secondsToTicks(240); // 7200
+/** Aether rate boundaries, per spec §5: 1x until 2:00, 2x until 4:00, 3x after. */
+export const DOUBLE_AETHER_TICK = secondsToTicks(120); // 3600
+export const TRIPLE_AETHER_TICK = secondsToTicks(240); // 7200
 
 // ---------------------------------------------------------------------------
-// Elixir
+// Aether
 // ---------------------------------------------------------------------------
 
 /**
- * Elixir is counted in integer "elixir points" rather than a fraction, so the
+ * Aether is counted in integer "aether points" rather than a fraction, so the
  * bar can never drift.
  *
- * The three rates in the spec are 1 elixir per 2.8s / 1.4s / 0.7s, which at
- * 30Hz is exactly 84 / 42 / 21 ticks. Defining 1 elixir as 84 points makes the
+ * The three rates in the spec are 1 aether per 2.8s / 1.4s / 0.7s, which at
+ * 30Hz is exactly 84 / 42 / 21 ticks. Defining 1 aether as 84 points makes the
  * per-tick gain the integers 1, 2 and 4 — no remainder, no accumulator.
  */
-export const EP_PER_ELIXIR = 84;
-export const MAX_ELIXIR = 10;
-export const MAX_ELIXIR_POINTS = MAX_ELIXIR * EP_PER_ELIXIR; // 840
-export const EP_GAIN_SINGLE = 1;
-export const EP_GAIN_DOUBLE = 2;
-export const EP_GAIN_TRIPLE = 4;
+export const AP_PER_AETHER = 84;
+export const MAX_AETHER = 10;
+export const MAX_AETHER_POINTS = MAX_AETHER * AP_PER_AETHER; // 840
+export const AP_GAIN_SINGLE = 1;
+export const AP_GAIN_DOUBLE = 2;
+export const AP_GAIN_TRIPLE = 4;
 
-/** Both players open the match with 5 elixir, as in the reference game. */
-export const STARTING_ELIXIR_POINTS = 5 * EP_PER_ELIXIR;
+/** Both players open the match with 5 aether, as in the reference game. */
+export const STARTING_AETHER_POINTS = 5 * AP_PER_AETHER;
 
 // ---------------------------------------------------------------------------
 // Grid

@@ -10,7 +10,7 @@
 import { getCard } from '@cards/registry';
 import { fx } from './math/fixed';
 import { createRng, shuffle, type Rng } from './math/rng';
-import { STARTING_ELIXIR_POINTS, EP_PER_ELIXIR } from './constants';
+import { STARTING_AETHER_POINTS, AP_PER_AETHER } from './constants';
 import {
   type Team,
   BLUE,
@@ -82,7 +82,7 @@ function createPlayerState(team: Team, config: MatchPlayerConfig, shuffleRng: Rn
 
   return {
     team,
-    elixirPoints: STARTING_ELIXIR_POINTS,
+    aetherPoints: STARTING_AETHER_POINTS,
     deck: battleCards,
     towerTroopCardId,
     levels,
@@ -95,7 +95,7 @@ function createPlayerState(team: Team, config: MatchPlayerConfig, shuffleRng: Rn
     heroAbilityCooldown: 0,
     crowns: 0,
     deployRights: { laneOpen: [false, false] },
-    elixirSpent: 0,
+    aetherSpent: 0,
   };
 }
 
@@ -149,19 +149,19 @@ export function createMatch(config: MatchConfig): MatchState {
 // Small read helpers shared by the systems, the HUD and the bot
 // ---------------------------------------------------------------------------
 
-/** Elixir as a display number, e.g. 7.35. */
-export function elixirOf(player: PlayerState): number {
-  return player.elixirPoints / EP_PER_ELIXIR;
+/** Aether as a display number, e.g. 7.35. */
+export function aetherOf(player: PlayerState): number {
+  return player.aetherPoints / AP_PER_AETHER;
 }
 
-export function canAfford(player: PlayerState, elixirCost: number): boolean {
-  return player.elixirPoints >= elixirCost * EP_PER_ELIXIR;
+export function canAfford(player: PlayerState, aetherCost: number): boolean {
+  return player.aetherPoints >= aetherCost * AP_PER_AETHER;
 }
 
-export function spendElixir(player: PlayerState, elixirCost: number): void {
-  const cost = elixirCost * EP_PER_ELIXIR;
-  player.elixirPoints -= cost;
-  player.elixirSpent += cost;
+export function spendAether(player: PlayerState, aetherCost: number): void {
+  const cost = aetherCost * AP_PER_AETHER;
+  player.aetherPoints -= cost;
+  player.aetherSpent += cost;
 }
 
 /**

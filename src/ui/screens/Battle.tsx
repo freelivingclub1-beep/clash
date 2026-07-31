@@ -19,8 +19,8 @@ import { LocalTransport } from '@net/transport';
 import { BattleRenderer, type DragState, type HudSnapshot } from '@render/loop';
 import { clientToTile } from '@render/camera';
 import { canDeployAt } from '@sim/nav/grid';
-import { EP_PER_ELIXIR } from '@sim/constants';
-import { elixirMultiplierAtTick } from '@sim/systems/clock';
+import { AP_PER_AETHER } from '@sim/constants';
+import { aetherMultiplierAtTick } from '@sim/systems/clock';
 import { heroCardIn } from '@game/deck';
 import type { MatchConfig } from '@sim/state';
 import type { Team } from '@sim/types';
@@ -28,7 +28,7 @@ import {
   AbilityButton,
   CardTile,
   CrownCounter,
-  ElixirBar,
+  AetherBar,
   MatchTimer,
   NextCard,
 } from '../battle/Hud';
@@ -42,7 +42,7 @@ export interface BattleProps {
 
 const EMPTY_HUD: HudSnapshot = {
   tick: 0,
-  elixir: 0,
+  aether: 0,
   crownsBlue: 0,
   crownsRed: 0,
   phase: 'regulation',
@@ -91,7 +91,7 @@ export function Battle({ config, localTeam, opponentName, onExit }: BattleProps)
     const lastRef = { value: '' };
     const renderer = new BattleRenderer(canvas, runner, localTeam, (snapshot) => {
       // Only push into React when something the HUD shows actually changed.
-      const key = `${snapshot.elixir}|${snapshot.crownsBlue}|${snapshot.crownsRed}|${snapshot.phase}|${snapshot.outcome}|${snapshot.abilityCooldownSeconds}|${snapshot.heroOnField}|${Math.floor(snapshot.tick / 15)}`;
+      const key = `${snapshot.aether}|${snapshot.crownsBlue}|${snapshot.crownsRed}|${snapshot.phase}|${snapshot.outcome}|${snapshot.abilityCooldownSeconds}|${snapshot.heroOnField}|${Math.floor(snapshot.tick / 15)}`;
       if (key === lastRef.value) return;
       lastRef.value = key;
       setHud(snapshot);
@@ -168,7 +168,7 @@ export function Battle({ config, localTeam, opponentName, onExit }: BattleProps)
       const cardId = runner.state.players[localTeam].hand[handIndex];
       const card = tryGetCard(cardId);
       if (!card) return;
-      if (runner.state.players[localTeam].elixirPoints < card.elixirCost * EP_PER_ELIXIR) return;
+      if (runner.state.players[localTeam].aetherPoints < card.aetherCost * AP_PER_AETHER) return;
 
       dragRef.current = { handIndex };
       setDragging(handIndex);
@@ -210,7 +210,7 @@ export function Battle({ config, localTeam, opponentName, onExit }: BattleProps)
   // --- derived HUD data ----------------------------------------------------
 
   const player = runner.state.players[localTeam];
-  const multiplier = elixirMultiplierAtTick(hud.tick);
+  const multiplier = aetherMultiplierAtTick(hud.tick);
   const finished = hud.outcome !== 'ongoing';
   const localWon =
     (hud.outcome === 'blue' && localTeam === 0) || (hud.outcome === 'red' && localTeam === 1);
@@ -237,13 +237,13 @@ export function Battle({ config, localTeam, opponentName, onExit }: BattleProps)
           cooldownSeconds={hud.abilityCooldownSeconds}
           affordable={
             !!heroCardId &&
-            player.elixirPoints >= (tryGetCard(heroCardId)?.abilityElixirCost ?? 99) * EP_PER_ELIXIR
+            player.aetherPoints >= (tryGetCard(heroCardId)?.abilityAetherCost ?? 99) * AP_PER_AETHER
           }
           onActivate={() => runner.submitAbility()}
         />
 
         <div className="battle-hud">
-          <ElixirBar points={hud.elixir} multiplier={multiplier} />
+          <AetherBar points={hud.aether} multiplier={multiplier} />
           <div className="hand-row">
             <NextCard cardId={player.queue[0]} />
             <div className="hand-cards">
@@ -254,7 +254,7 @@ export function Battle({ config, localTeam, opponentName, onExit }: BattleProps)
                     key={`${cardId}-${index}`}
                     card={card}
                     affordable={
-                      !!card && player.elixirPoints >= card.elixirCost * EP_PER_ELIXIR
+                      !!card && player.aetherPoints >= card.aetherCost * AP_PER_AETHER
                     }
                     dragging={dragging === index}
                     evolutionReady={player.evoReady.get(cardId) === true}

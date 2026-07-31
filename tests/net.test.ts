@@ -150,9 +150,9 @@ describe('bot-driven match', () => {
     expect(runner.finished).toBe(true);
     expect(['blue', 'red', 'draw']).toContain(runner.state.outcome);
 
-    // Both bots should have actually spent elixir on something.
-    expect(runner.state.players[BLUE].elixirSpent).toBeGreaterThan(0);
-    expect(runner.state.players[RED].elixirSpent).toBeGreaterThan(0);
+    // Both bots should have actually spent aether on something.
+    expect(runner.state.players[BLUE].aetherSpent).toBeGreaterThan(0);
+    expect(runner.state.players[RED].aetherSpent).toBeGreaterThan(0);
 
     // And real damage should have been traded.
     const totalTowerDamage = runner.state.entities

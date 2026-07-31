@@ -301,10 +301,10 @@ export function CardMaker({ onBack }: { onBack: () => void }) {
           </div>
           <div className="grid-2">
             <SelectInput
-              label="Elixir Cost"
-              value={String(draft.elixirCost)}
+              label="Aether Cost"
+              value={String(draft.aetherCost)}
               options={range(1, 10)}
-              onChange={(v) => update('elixirCost', Number(v))}
+              onChange={(v) => update('aetherCost', Number(v))}
             />
             <SelectInput
               label="Unlock Arena"
@@ -624,10 +624,10 @@ export function CardMaker({ onBack }: { onBack: () => void }) {
             <>
               <div className="grid-2">
                 <SelectInput
-                  label="Ability Elixir Cost"
-                  value={String(draft.abilityElixirCost)}
+                  label="Ability Aether Cost"
+                  value={String(draft.abilityAetherCost)}
                   options={range(1, 4)}
-                  onChange={(v) => update('abilityElixirCost', Number(v))}
+                  onChange={(v) => update('abilityAetherCost', Number(v))}
                 />
                 <NumberInput
                   label="Ability Cooldown (s)"
@@ -690,8 +690,8 @@ export function CardMaker({ onBack }: { onBack: () => void }) {
                 <span>{stats.tilesPerSecond} tiles/s</span>
               </div>
               <div className="stat-line">
-                <span className="label">Elixir per 1000 health</span>
-                <span>{stats.elixirPerThousandHealth}</span>
+                <span className="label">Aether per 1000 health</span>
+                <span>{stats.aetherPerThousandHealth}</span>
               </div>
               <div className="muted" style={{ marginTop: 8 }}>
                 Health by level (1–{MAX_LEVEL})

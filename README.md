@@ -46,7 +46,7 @@ modification. (The movement-speed table lives in `@cards/schema` rather than
 Every other design decision follows from this one.
 
 - **Fixed-point.** Positions, ranges and velocities are Q16.16 integers (`@sim/math/fixed`).
-  Health, damage and elixir stay plain integers — Q16.16 would overflow int32 on a
+  Health, damage and aether stay plain integers — Q16.16 would overflow int32 on a
   100k-HP tower. Time is integer ticks and nothing else.
 - **Seeded RNG.** sfc32 stored as a plain struct so it snapshots with the rest of match
   state. Two independent streams per match: `shuffleRng` for the deck cycle, `simRng` for
@@ -57,8 +57,8 @@ Every other design decision follows from this one.
 - **Total orderings everywhere.** Pathfinding heap ties break on cell index; target ties
   break on entity id. Cost and distance alone are not total orders, and leaving ties to
   insertion order would make results depend on spawn history.
-- **No drift in the economy.** The spec's 2.8s / 1.4s / 0.7s elixir rates are exactly
-  84 / 42 / 21 ticks at 30Hz. Defining one elixir as 84 integer *elixir points* makes the
+- **No drift in the economy.** The spec's 2.8s / 1.4s / 0.7s aether rates are exactly
+  84 / 42 / 21 ticks at 30Hz. Defining one aether as 84 integer *aether points* makes the
   per-tick gain 1, 2 and 4 — no accumulator, no remainder, no rounding over five minutes.
 
 A seed plus a command log is a complete match. `RecordingTransport` captures one and
@@ -68,7 +68,7 @@ hash, which is what makes the determinism claim checkable rather than merely ass
 ## Simulation
 
 One fixed system order per tick, documented in `src/sim/tick.ts`. The ordering is
-load-bearing — commands resolve before elixir income so a card is paid for at the balance
+load-bearing — commands resolve before aether income so a card is paid for at the balance
 it was played against, and towers update before the clock because the clock reads crowns.
 
 **Navigation.** Nearly every unit is walking at one of six fixed goals (each team's two
@@ -117,7 +117,7 @@ Two notes where the implementation interprets the spec:
 | Hero abilities (6 hooks) | `src/sim/scripts/abilities.ts` |
 | Tower Troops | `src/sim/state.ts`, `src/sim/entities.ts` |
 | Level 1–16 progression | `src/cards/scaling.ts` |
-| Elixir phases, overtime, sudden death | `src/sim/systems/clock.ts` |
+| Aether phases, overtime, sudden death | `src/sim/systems/clock.ts` |
 
 Princess tower health comes from the equipped Tower Troop card, which is what differentiates
 Dagger Duchess (2200 HP, long reach, fast) from Cannoneer (2800 HP, ground-only, heavy).
@@ -156,7 +156,7 @@ are immediately selectable in the deck builder and playable in a match.
 80 tests across four suites:
 
 - `tests/cards.test.ts` — roster integrity, cross-field validation, runtime cards, scaling
-- `tests/sim.test.ts` — arena geometry, elixir rates, deployment rules, river avoidance,
+- `tests/sim.test.ts` — arena geometry, aether rates, deployment rules, river avoidance,
   bridge crossing, tower engagement, and determinism asserted **tick by tick**, not only at
   the end
 - `tests/net.test.ts` — transport bucketing, record/replay convergence, matchmaking gates,

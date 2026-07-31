@@ -84,7 +84,7 @@ const identitySchema = z.object({
   id: z.string().regex(/^card_[a-z]+_[a-z0-9_]+$/),
   rarity: z.enum(RARITIES),
   category: z.enum(CARD_CATEGORIES),
-  elixirCost: z.number().int().min(1).max(10),
+  aetherCost: z.number().int().min(1).max(10),
   unlockArena: z.number().int().min(1).max(24),
   description: z.string().max(400).default(''),
   /**
@@ -156,6 +156,18 @@ const effectsSchema = z.object({
   deathEffectParam: z.string().default(''),
   deathEffectDamage: z.number().int().min(0).max(5000).default(0),
   deathEffectCount: z.number().int().min(0).max(20).default(0),
+  /**
+   * A named always-on mechanic — reflect, parry, chain, aura and so on.
+   * Each one carries an EPP price in `@cards/balance`, deducted from the stat
+   * budget before health and damage are set, so a passive is never free.
+   */
+  passiveId: z.string().default('none'),
+  /**
+   * Tuning knob whose meaning is passive-specific. It may be a fraction (0.3
+   * for a 30% reflect), a count (4 death-split copies) or a flat rate (60
+   * health healed per second), so the range is deliberately wide.
+   */
+  passiveMagnitude: z.number().min(0).max(2000).default(0),
 });
 
 /** F — evolution engine (2026). */
@@ -171,7 +183,7 @@ const evolutionSchema = z.object({
 /** G — hero / champion active ability. */
 const heroSchema = z.object({
   isHero: z.boolean().default(false),
-  abilityElixirCost: z.number().int().min(1).max(4).default(2),
+  abilityAetherCost: z.number().int().min(1).max(4).default(2),
   abilityCooldown: z.number().min(1).max(60).default(15),
   abilityActionHook: z.enum(ABILITY_HOOKS).default('ChargeDash'),
   abilityTargetFilter: z.enum(ABILITY_TARGET_FILTERS).default('Self'),
@@ -235,6 +247,9 @@ export const cardDefinitionSchema = identitySchema
     if (card.isFlying && card.category === 'Building') {
       fail('isFlying', 'Buildings cannot fly.');
     }
+    if (card.passiveId !== 'none' && card.passiveMagnitude <= 0) {
+      fail('passiveMagnitude', 'A passive needs a magnitude above 0.');
+    }
   });
 
 export type CardDefinition = z.infer<typeof cardDefinitionSchema>;
@@ -291,7 +306,7 @@ export function emptyCardDraft(): CardDraft {
     id: makeCardId('Troop', 'New Card'),
     rarity: 'Common',
     category: 'Troop',
-    elixirCost: 3,
+    aetherCost: 3,
     unlockArena: 1,
     baseHealth: 600,
     damage: 100,

@@ -12,6 +12,7 @@ import { fx } from '../math/fixed';
 import { setOccupied, TOWER_LAYOUTS } from '../nav/grid';
 import { applyDamageAtPoint, releaseLocksOn } from './combat';
 import { findEntity, formationOffsets, resolveStats, spawnTroop } from '../entities';
+import { passiveHooks } from '../scripts/passives';
 import { type Entity, type MatchState, NO_TARGET } from '../types';
 
 function runDeathEffect(state: MatchState, entity: Entity): void {
@@ -85,6 +86,12 @@ export function deaths(state: MatchState): void {
     });
 
     runDeathEffect(state, entity);
+
+    // Death passives run alongside the card's declared death effect; a card
+    // may legitimately have both (split into copies *and* leave a zone).
+    const stats = resolveStats(entity.cardId, entity.level, entity.evolved);
+    passiveHooks(stats.card.passiveId)?.onDeath?.(state, entity, stats.card.passiveMagnitude);
+
     releaseLocksOn(state, entity.id);
 
     // A dead structure stops blocking movement, which invalidates flow fields.

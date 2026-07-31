@@ -11,7 +11,7 @@
   --blue: #4a9eff;
   --red: #ff6b5b;
   --gold: #ffd84a;
-  --elixir: #d94ad9;
+  --aether: #d94ad9;
   --ok: #4ad98a;
   --danger: #ff5b5b;
 }
@@ -236,7 +236,7 @@ body {
   min-width: clamp(16px, 4.4vw, 26px);
   height: clamp(16px, 4.4vw, 26px);
   border-radius: 50%;
-  background: var(--elixir);
+  background: var(--aether);
   color: #fff;
   font-size: clamp(9px, 2.6vw, 15px);
   font-weight: 800;
@@ -259,23 +259,23 @@ body {
   letter-spacing: 0.04em;
 }
 
-/* --- elixir bar --------------------------------------------------------- */
+/* --- aether bar --------------------------------------------------------- */
 
-.elixir-row {
+.aether-row {
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
-.elixir-value {
+.aether-value {
   font-weight: 800;
   font-size: clamp(12px, 3.4vw, 20px);
-  color: var(--elixir);
+  color: var(--aether);
   min-width: 2.6em;
   font-variant-numeric: tabular-nums;
 }
 
-.elixir-bar {
+.aether-bar {
   flex: 1;
   display: grid;
   grid-template-columns: repeat(10, 1fr);
@@ -283,13 +283,13 @@ body {
   height: clamp(10px, 2.8vw, 18px);
 }
 
-.elixir-cell {
+.aether-cell {
   background: #2a1f33;
   border-radius: 2px;
   overflow: hidden;
 }
 
-.elixir-fill {
+.aether-fill {
   height: 100%;
   background: linear-gradient(180deg, #f06be0, #c22bb8);
 }
@@ -325,7 +325,7 @@ body {
 
 .ability-button .cost {
   font-size: 0.8em;
-  color: var(--elixir);
+  color: var(--aether);
 }
 
 /* --- generic screens ---------------------------------------------------- */

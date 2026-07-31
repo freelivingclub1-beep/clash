@@ -82,8 +82,8 @@ export interface DerivedStats {
   swarmDamagePerHit: number;
   /** Combined health of every entity the card spawns, at the baseline level. */
   swarmHealth: number;
-  /** Elixir spent per point of combined health — lower is more efficient. */
-  elixirPerThousandHealth: number;
+  /** Aether spent per point of combined health — lower is more efficient. */
+  aetherPerThousandHealth: number;
 }
 
 export function derivedStats(card: CardDefinition): DerivedStats {
@@ -104,7 +104,7 @@ export function derivedStats(card: CardDefinition): DerivedStats {
     tilesPerSecond: Math.round((SPEED_TILES_PER_MIN[card.speedClass] / 60) * 100) / 100,
     swarmDamagePerHit: card.damage * card.spawnCount,
     swarmHealth,
-    elixirPerThousandHealth:
-      swarmHealth > 0 ? Math.round((card.elixirCost / (swarmHealth / 1000)) * 100) / 100 : 0,
+    aetherPerThousandHealth:
+      swarmHealth > 0 ? Math.round((card.aetherCost / (swarmHealth / 1000)) * 100) / 100 : 0,
   };
 }
