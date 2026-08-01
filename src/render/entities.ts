@@ -23,6 +23,7 @@ import type { Entity, MatchState, Team } from '@sim/types';
 import type { MatchRunner } from '@game/match';
 import { TILE_W, TILE_H, tileToLogical } from './camera';
 import { modelFor, spriteFor } from './sprites';
+import { type Element, ELEMENT_LOOKS, elementOf } from './elements';
 import { texturePattern } from './textures';
 
 /** Ticks a swing animation plays for, regardless of the card's reload. */
@@ -676,7 +677,16 @@ function drawProjectile(
 ): void {
   const card = tryGetCard(entity.cardId);
   const look = shotLookFor(card);
-  const tint = card?.tint ?? '#ffffff';
+  /*
+   * A shot is coloured by what it *is*, not by its owner's card art. Every
+   * projectile used to be a small silhouette in the card's tint, so a wizard's
+   * fireball and an archer's arrow differed only in outline and a shade of
+   * paint — which is the whole reason the board read as "everyone shoots a
+   * dot". The element decides the core, the body and the trail.
+   */
+  const el: Element = card ? elementOf(card) : 'steel';
+  const glow = ELEMENT_LOOKS[el];
+  const tint = glow.body;
   // Bigger shot for a bigger blast: a Fireball should not read like an arrow.
   const scale = entity.splashRadius > 0 ? 1.35 : 1;
 
@@ -745,8 +755,159 @@ function drawProjectile(
   // A lobbed shot tumbles rather than pointing at anything; a flat one points
   // exactly where it is going.
   ctx.rotate(lobbed ? progress * Math.PI * 3 : heading);
+
+  /*
+   * The element is drawn *around* the shot, before the shot itself.
+   *
+   * The silhouette still comes from the weapon — an arrow is arrow-shaped
+   * whoever looses it — but a fireball now trails flame, a frost bolt trails
+   * ice, and a bolt of lightning crackles. That envelope is the difference
+   * between "a wizard fires a projectile" and "a wizard throws a fireball".
+   */
+  drawShotAura(ctx, el, glow, scale, progress);
+
   drawShotBody(ctx, look, tint, scale);
   ctx.restore();
+}
+
+/**
+ * The elemental envelope around a shot in flight.
+ *
+ * Drawn in the shot's own rotated space, so "behind" is always -x and the
+ * flames, shards and droplets stream backwards along the flight path however
+ * the shot is heading.
+ */
+function drawShotAura(
+  ctx: CanvasRenderingContext2D,
+  el: Element,
+  glow: { core: string; body: string; trail: string },
+  scale: number,
+  progress: number,
+): void {
+  const s = scale;
+  switch (el) {
+    case 'fire': {
+      // A tapering tongue streaming back from the head of the shot.
+      ctx.fillStyle = glow.trail;
+      ctx.beginPath();
+      ctx.moveTo(-20 * s, 0);
+      ctx.quadraticCurveTo(-8 * s, -6 * s, 4 * s, 0);
+      ctx.quadraticCurveTo(-8 * s, 6 * s, -20 * s, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = glow.body;
+      ctx.beginPath();
+      ctx.moveTo(-13 * s, 0);
+      ctx.quadraticCurveTo(-5 * s, -4 * s, 4 * s, 0);
+      ctx.quadraticCurveTo(-5 * s, 4 * s, -13 * s, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = glow.core;
+      ctx.beginPath();
+      ctx.arc(0, 0, 3.4 * s, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case 'frost': {
+      // A shard with two smaller splinters trailing it.
+      ctx.fillStyle = glow.body;
+      for (const [dx, dy, r] of [[-9, -3, 2.4], [-13, 3, 2], [-5, 2, 1.6]] as const) {
+        ctx.beginPath();
+        ctx.moveTo(dx * s, (dy - r) * s);
+        ctx.lineTo((dx + r) * s, dy * s);
+        ctx.lineTo(dx * s, (dy + r) * s);
+        ctx.lineTo((dx - r) * s, dy * s);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.fillStyle = glow.core;
+      ctx.beginPath();
+      ctx.arc(0, 0, 2.6 * s, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case 'storm': {
+      // Crackle: a short jagged tail that changes shape as it flies.
+      ctx.strokeStyle = glow.core;
+      ctx.lineWidth = 1.8 * s;
+      ctx.beginPath();
+      ctx.moveTo(2 * s, 0);
+      const steps = 4;
+      for (let i = 1; i <= steps; i++) {
+        const jag = ((i * 7 + Math.round(progress * 90)) % 5) - 2;
+        ctx.lineTo(-i * 4.5 * s, jag * s);
+      }
+      ctx.stroke();
+      ctx.strokeStyle = glow.body;
+      ctx.lineWidth = 4 * s;
+      ctx.globalAlpha *= 0.35;
+      ctx.stroke();
+      ctx.globalAlpha /= 0.35;
+      break;
+    }
+    case 'toxic': {
+      ctx.fillStyle = glow.trail;
+      for (const [dx, r] of [[-7, 3], [-12, 2.2], [-16, 1.5]] as const) {
+        ctx.globalAlpha *= 0.55;
+        ctx.beginPath();
+        ctx.arc(dx * s, 0, r * s, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha /= 0.55;
+      }
+      ctx.fillStyle = glow.body;
+      ctx.beginPath();
+      ctx.arc(0, 0, 3.6 * s, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case 'water': {
+      // A teardrop, blunt end forward.
+      ctx.fillStyle = glow.body;
+      ctx.beginPath();
+      ctx.moveTo(4 * s, 0);
+      ctx.quadraticCurveTo(0, -4 * s, -12 * s, 0);
+      ctx.quadraticCurveTo(0, 4 * s, 4 * s, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = glow.core;
+      ctx.beginPath();
+      ctx.arc(1 * s, -1 * s, 1.6 * s, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case 'arcane':
+    case 'holy': {
+      // A halo that pulses along the flight rather than a solid body.
+      const pulse = 3 + Math.abs(Math.sin(progress * Math.PI * 4)) * 2;
+      ctx.strokeStyle = glow.body;
+      ctx.lineWidth = 1.6 * s;
+      ctx.beginPath();
+      ctx.arc(0, 0, pulse * s, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = glow.core;
+      ctx.beginPath();
+      ctx.arc(0, 0, 2.2 * s, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case 'shadow': {
+      ctx.fillStyle = glow.trail;
+      ctx.globalAlpha *= 0.6;
+      ctx.beginPath();
+      ctx.ellipse(-6 * s, 0, 9 * s, 3.4 * s, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha /= 0.6;
+      ctx.fillStyle = glow.body;
+      ctx.beginPath();
+      ctx.arc(0, 0, 3 * s, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case 'steel':
+    default:
+      // Nothing: a steel shot is its own silhouette and wants no glow.
+      break;
+  }
 }
 
 export function drawEntities(

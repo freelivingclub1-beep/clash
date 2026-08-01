@@ -230,7 +230,12 @@ export interface MatchState {
 export type SimEvent =
   | { type: 'spawn'; entityId: number; cardId: string; team: Team; x: Fx; y: Fx }
   | { type: 'death'; entityId: number; cardId: string; team: Team; x: Fx; y: Fx }
-  | { type: 'hit'; x: Fx; y: Fx; damage: number; splash: boolean }
+  /**
+   * A blow landing. Carries the card that dealt it purely so the renderer can
+   * tell a fireball from an arrow — before this the event was only a position
+   * and a number, so every impact in the game drew the same yellow puff.
+   */
+  | { type: 'hit'; cardId: string; x: Fx; y: Fx; damage: number; splash: boolean }
   | { type: 'towerDestroyed'; towerIndex: number; team: Team }
   | { type: 'shieldBreak'; entityId: number; team: Team; x: Fx; y: Fx }
   /** A shot leaving a weapon, so the renderer can flash the muzzle. */

@@ -163,7 +163,7 @@ export function applyDamageAtPoint(
       applyDamage(state, primary, damageAgainst(primary, damage, card), attacker, damageOpts);
       if (card.onHitStatus !== 'None') applyStatus(card, primary, statusTicks);
       if (attacker) passive?.onHit?.(state, attacker, primary, card.passiveMagnitude);
-      state.events.push({ type: 'hit', x, y, damage, splash: false });
+      state.events.push({ type: 'hit', cardId: card.id, x, y, damage, splash: false });
     }
     return;
   }
@@ -230,7 +230,7 @@ export function applyDamageAtPoint(
       if (card.onHitStatus !== 'None') applyStatus(card, entity, statusTicks);
       if (entity.id === primaryId) passive?.onHit?.(state, attacker, entity, card.passiveMagnitude);
     }
-    state.events.push({ type: 'hit', x, y, damage, splash: true });
+    state.events.push({ type: 'hit', cardId: card.id, x, y, damage, splash: true });
     return;
   }
 
@@ -273,7 +273,7 @@ export function applyDamageAtPoint(
       passive?.onHit?.(state, attacker, entity, card.passiveMagnitude);
     }
   }
-  state.events.push({ type: 'hit', x, y, damage, splash: true });
+  state.events.push({ type: 'hit', cardId: card.id, x, y, damage, splash: true });
 }
 
 export function combat(state: MatchState): void {

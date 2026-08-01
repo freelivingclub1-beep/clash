@@ -19,12 +19,32 @@
 import { fxToFloat } from '@sim/math/fixed';
 import type { SimEvent, Team } from '@sim/types';
 import { TILE_W, TILE_H, tileToLogical } from './camera';
+import { tryGetCard } from '@cards/registry';
+import { type Element, ELEMENT_LOOKS, elementOf } from './elements';
 
 const MAX_PARTICLES = 600;
 const MAX_NUMBERS = 60;
 const MAX_BOLTS = 40;
 
-type ParticleShape = 'spark' | 'puff' | 'ring' | 'shard';
+type ParticleShape =
+  | 'spark'
+  | 'puff'
+  | 'ring'
+  | 'shard'
+  /** Tapered tongue of flame that shrinks and rises. */
+  | 'flame'
+  /** Hard-edged diamond, for ice and glass. */
+  | 'crystal'
+  /** Swelling then popping circle, for gas and rot. */
+  | 'bubble'
+  /** Teardrop that falls fast, for water. */
+  | 'droplet'
+  /** Slow, growing, translucent — smoke and residue. */
+  | 'smoke'
+  /** Four-point twinkle, for holy and arcane motes. */
+  | 'star'
+  /** A flattened ring that spreads along the ground rather than expanding. */
+  | 'wave';
 
 interface Particle {
   active: boolean;
@@ -241,18 +261,135 @@ export class VfxSystem {
    * `viewTeam` is needed because everything here works in logical screen
    * space, and the board is mirrored for a red-side player.
    */
+  /**
+   * An impact, drawn as the thing that caused it.
+   *
+   * Every hit in the game used to be the same warm yellow burst — the event
+   * carried no card, so the renderer could not have known any better. With the
+   * card in hand each element gets its own behaviour rather than its own
+   * colour: fire throws tongues of flame that rise and leaves smoke, frost
+   * shatters into crystals and lingers as a pale ring, toxin ferments as
+   * bubbles that outlast the blow, water spreads a flat wave along the ground.
+   *
+   * `power` scales the whole effect, so the same routine serves a jab from a
+   * dagger and a five-aether spell landing.
+   */
+  private elementalImpact(el: Element, x: number, y: number, power: number): void {
+    const look = ELEMENT_LOOKS[el];
+    const n = (base: number): number => Math.max(2, Math.round(base * power));
+
+    // Bigger effects also last longer, so a spell reads as an event rather
+    // than as a large flicker.
+    const life = (base: number): number => Math.round(base * (0.75 + power * 0.35));
+
+    switch (el) {
+      case 'fire':
+        // Flames are the whole effect, so they are large, slow and numerous;
+        // at ember size this read as an orange dot rather than as fire.
+        this.burst(x, y, n(14), look.body, { speed: 1.5 * power, size: 7, life: life(620), shape: 'flame', gravity: -0.045 });
+        this.burst(x, y, n(7), look.core, { speed: 0.9 * power, size: 5, life: life(460), shape: 'flame', gravity: -0.06 });
+        this.burst(x, y, n(6), look.trail, { speed: 1.1 * power, size: 6, life: life(900), shape: 'smoke', gravity: -0.016 });
+        this.burst(x, y, n(8), '#ffc46b', { speed: 3.4 * power, size: 2, life: life(420), shape: 'spark', gravity: 0.03 });
+        this.ring(x, y, 'rgba(255,140,60,0.85)', 26 * power, life(340));
+        break;
+
+      case 'frost':
+        this.burst(x, y, n(11), look.body, { speed: 3 * power, size: 3, life: 420, shape: 'crystal', gravity: 0.03 });
+        this.burst(x, y, n(4), look.core, { speed: 1.2 * power, size: 2, life: 620, shape: 'star', gravity: -0.004 });
+        // Frost hangs around: two rings, the second slower and wider.
+        this.ring(x, y, 'rgba(190,240,255,0.9)', 22 * power, 260);
+        this.ring(x, y, 'rgba(127,216,255,0.5)', 34 * power, 620);
+        break;
+
+      case 'toxic':
+        this.burst(x, y, n(9), look.body, { speed: 1.4 * power, size: 3, life: 900, shape: 'bubble', gravity: -0.018 });
+        this.burst(x, y, n(5), look.trail, { speed: 1.0 * power, size: 4, life: 1100, shape: 'smoke', gravity: -0.012 });
+        break;
+
+      case 'storm': {
+        this.burst(x, y, n(14), look.core, { speed: 4.2 * power, size: 3, life: life(340), shape: 'spark' });
+        this.ring(x, y, 'rgba(255,255,255,0.95)', 18 * power, life(220));
+        this.ring(x, y, 'rgba(159,208,255,0.8)', 30 * power, life(360));
+        /*
+         * Earthing arcs. Both the count and the lifetime scale with power —
+         * at a fixed three short-lived forks a spell-sized discharge had
+         * already vanished by the time the rest of the effect was at its peak.
+         */
+        const forks = Math.max(4, Math.round(4 * power));
+        for (let i = 0; i < forks; i++) {
+          const a = (i / forks) * Math.PI * 2 + this.random() * 0.9;
+          const r = 30 * power;
+          this.arc(x, y, x + Math.cos(a) * r, y + Math.sin(a) * r * 0.55, look.core, life(300));
+          this.arc(x, y, x + Math.cos(a) * r * 0.6, y + Math.sin(a) * r * 0.35, look.body, life(260));
+        }
+        break;
+      }
+
+      case 'water':
+        this.burst(x, y, n(10), look.body, { speed: 2.6 * power, size: 3, life: 480, shape: 'droplet', gravity: 0.06 });
+        this.burst(x, y, n(4), look.core, { speed: 1.6 * power, size: 2, life: 360, shape: 'droplet', gravity: 0.05 });
+        // Flat and spreading rather than a bubble expanding.
+        this.wave(x, y, 'rgba(120,200,240,0.85)', 30 * power, 460);
+        this.wave(x, y, 'rgba(74,168,224,0.5)', 42 * power, 640);
+        break;
+
+      case 'arcane':
+        this.burst(x, y, n(10), look.body, { speed: 2.2 * power, size: 3, life: 520, shape: 'star', gravity: -0.01 });
+        this.ring(x, y, 'rgba(180,95,224,0.9)', 24 * power, 400);
+        this.ring(x, y, 'rgba(240,216,255,0.55)', 14 * power, 560);
+        break;
+
+      case 'holy':
+        this.burst(x, y, n(9), look.core, { speed: 1.8 * power, size: 3, life: 620, shape: 'star', gravity: -0.03 });
+        this.burst(x, y, n(5), look.body, { speed: 2.6 * power, size: 2, life: 420, shape: 'spark', gravity: -0.02 });
+        this.ring(x, y, 'rgba(255,216,74,0.9)', 26 * power, 380);
+        break;
+
+      case 'shadow':
+        // A dark bloom with bright motes pulling through it, so it reads as
+        // something being unmade rather than as a grey smudge.
+        this.burst(x, y, n(10), look.trail, { speed: 1.4 * power, size: 6, life: life(700), shape: 'smoke', gravity: 0.004 });
+        this.burst(x, y, n(8), look.core, { speed: 2.8 * power, size: 3, life: life(420), shape: 'star', gravity: -0.01 });
+        this.ring(x, y, 'rgba(201,176,224,0.9)', 24 * power, life(420));
+        this.ring(x, y, 'rgba(36,21,51,0.95)', 13 * power, life(560));
+        break;
+
+      case 'steel':
+      default:
+        // Struck metal: bright, fast, short, and thrown downward.
+        this.burst(x, y, n(12), '#ffffff', { speed: 4.2 * power, size: 2, life: life(240), shape: 'spark', gravity: 0.09 });
+        this.burst(x, y, n(7), look.core, { speed: 3.0 * power, size: 3, life: life(320), shape: 'shard', gravity: 0.07 });
+        this.burst(x, y, n(4), look.trail, { speed: 1.6 * power, size: 4, life: life(460), shape: 'puff', gravity: 0.01 });
+        this.ring(x, y, 'rgba(242,245,250,0.7)', 16 * power, life(200));
+        break;
+    }
+  }
+
+  /** A flattened ring that spreads along the ground. */
+  wave(x: number, y: number, colour: string, size = 30, life = 420): void {
+    const particle = this.nextParticle();
+    particle.active = true;
+    particle.x = x;
+    particle.y = y;
+    particle.vx = 0;
+    particle.vy = 0;
+    particle.maxLife = life;
+    particle.life = life;
+    particle.size = size;
+    particle.colour = colour;
+    particle.shape = 'wave';
+    particle.gravity = 0;
+  }
+
   consume(events: readonly SimEvent[], viewTeam: Team): void {
     for (const event of events) {
       switch (event.type) {
         case 'hit': {
           const at = tileToLogical(fxToFloat(event.x), fxToFloat(event.y), viewTeam);
-          if (event.splash) {
-            this.burst(at.x, at.y, 14, '#ffd27a', { speed: 3.2, size: 3 });
-            this.ring(at.x, at.y, 'rgba(255,200,110,0.85)', 34);
-            this.addShake(2.2);
-          } else {
-            this.burst(at.x, at.y, 5, '#ffe9b0', { speed: 1.8, size: 2 });
-          }
+          const card = tryGetCard(event.cardId);
+          const el = card ? elementOf(card) : 'steel';
+          this.elementalImpact(el, at.x, at.y, event.splash ? 1.35 : 0.6);
+          if (event.splash) this.addShake(2.2);
           if (event.damage > 0) {
             this.damageNumber(at.x, at.y - TILE_H, event.damage, event.splash ? '#ffcf6b' : '#ffffff');
           }
@@ -271,10 +408,18 @@ export class VfxSystem {
         }
 
         case 'spell': {
+          /*
+           * A spell landing is the biggest single visual moment a player
+           * causes, and every one of them used to be the same orange ring.
+           */
           const at = tileToLogical(fxToFloat(event.x), fxToFloat(event.y), viewTeam);
           const radius = fxToFloat(event.radius);
-          this.burst(at.x, at.y, 34, '#ff9a4a', { speed: 4.5, size: 4, life: 620 });
-          this.ring(at.x, at.y, 'rgba(255,140,60,0.9)', radius * TILE_W, 480);
+          const card = tryGetCard(event.cardId);
+          const el = card ? elementOf(card) : 'fire';
+          const look = ELEMENT_LOOKS[el];
+          this.elementalImpact(el, at.x, at.y, 2.4);
+          // Plus a ring at the spell's own radius, so its footprint is exact.
+          this.ring(at.x, at.y, look.body, radius * TILE_W, 480);
           this.addShake(5);
           break;
         }
@@ -493,6 +638,92 @@ export class VfxSystem {
           ctx.fillStyle = particle.colour;
           ctx.fillRect(particle.x, particle.y, particle.size, particle.size * 1.8);
           break;
+        case 'flame': {
+          // Tapered and taller than it is wide, shrinking as it burns out.
+          const h = particle.size * 3.2 * t;
+          const w = particle.size * (0.5 + t * 0.6);
+          ctx.fillStyle = particle.colour;
+          ctx.beginPath();
+          ctx.moveTo(particle.x, particle.y - h);
+          ctx.quadraticCurveTo(particle.x + w, particle.y - h * 0.35, particle.x + w * 0.6, particle.y);
+          ctx.quadraticCurveTo(particle.x, particle.y + w * 0.4, particle.x - w * 0.6, particle.y);
+          ctx.quadraticCurveTo(particle.x - w, particle.y - h * 0.35, particle.x, particle.y - h);
+          ctx.closePath();
+          ctx.fill();
+          break;
+        }
+        case 'crystal': {
+          const r = particle.size * (0.7 + t);
+          ctx.fillStyle = particle.colour;
+          ctx.beginPath();
+          ctx.moveTo(particle.x, particle.y - r * 1.6);
+          ctx.lineTo(particle.x + r * 0.7, particle.y);
+          ctx.lineTo(particle.x, particle.y + r * 1.6);
+          ctx.lineTo(particle.x - r * 0.7, particle.y);
+          ctx.closePath();
+          ctx.fill();
+          break;
+        }
+        case 'bubble': {
+          // Swells as it rises, so a cloud looks like it is fermenting.
+          const r = particle.size * (2.2 - t * 1.1);
+          ctx.strokeStyle = particle.colour;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(particle.x, particle.y, r, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.globalAlpha *= 0.35;
+          ctx.fillStyle = particle.colour;
+          ctx.fill();
+          ctx.globalAlpha = Math.max(0, Math.min(1, t));
+          break;
+        }
+        case 'droplet': {
+          const r = particle.size * (0.6 + t * 0.8);
+          ctx.fillStyle = particle.colour;
+          ctx.beginPath();
+          ctx.moveTo(particle.x, particle.y - r * 1.8);
+          ctx.quadraticCurveTo(particle.x + r, particle.y, particle.x, particle.y + r);
+          ctx.quadraticCurveTo(particle.x - r, particle.y, particle.x, particle.y - r * 1.8);
+          ctx.closePath();
+          ctx.fill();
+          break;
+        }
+        case 'smoke': {
+          ctx.globalAlpha *= 0.4;
+          ctx.fillStyle = particle.colour;
+          ctx.beginPath();
+          ctx.arc(particle.x, particle.y, particle.size * (2.4 - t * 1.2), 0, Math.PI * 2);
+          ctx.fill();
+          ctx.globalAlpha = Math.max(0, Math.min(1, t));
+          break;
+        }
+        case 'star': {
+          /*
+           * Two crossed bars rather than a four-lobed path. Stars are the most
+           * numerous particle in the game — holy, arcane and shadow all throw
+           * them — and a path fill per particle per frame is far dearer than a
+           * pair of rects for a twinkle a few pixels across.
+           */
+          const r = particle.size * (1.4 - t * 0.4);
+          ctx.fillStyle = particle.colour;
+          ctx.fillRect(particle.x - r, particle.y - r * 0.28, r * 2, r * 0.56);
+          ctx.fillRect(particle.x - r * 0.28, particle.y - r, r * 0.56, r * 2);
+          break;
+        }
+        case 'wave': {
+          /*
+           * Spreads along the ground instead of expanding evenly, which is
+           * what makes water read as water rather than as another shockwave.
+           */
+          const grow = particle.size * (2.2 - t * 1.2);
+          ctx.strokeStyle = particle.colour;
+          ctx.lineWidth = 4 * t + 1;
+          ctx.beginPath();
+          ctx.ellipse(particle.x, particle.y, grow, grow * 0.28, 0, 0, Math.PI * 2);
+          ctx.stroke();
+          break;
+        }
         default:
           ctx.fillStyle = particle.colour;
           ctx.fillRect(particle.x, particle.y, particle.size, particle.size);
