@@ -1205,6 +1205,31 @@ export function blitSprite(
   }
 }
 
+/**
+ * Draw a figure standing on a point, sized by the figure rather than by its
+ * cell.
+ *
+ * An atlas cell is wider and taller than the character in it: weapon arcs need
+ * somewhere to go, so a mace swing that inks 92 pixels across sits in a 96px
+ * cell around a 64px body. Sizing the blit by the cell would shrink every unit
+ * by a third the moment the margin appeared, and anchoring the cell's bottom
+ * edge to the ground would leave them all hovering. Callers pass the height
+ * the *figure* should be and this places the cell around it.
+ */
+export function blitFigure(
+  ctx: CanvasRenderingContext2D,
+  sprite: DrawnSprite,
+  centreX: number,
+  groundY: number,
+  figureHeight: number,
+): void {
+  const margin = sprite.margin ?? 1;
+  const foot = sprite.footFrac ?? 1;
+  const boxHeight = figureHeight * margin;
+  const boxWidth = boxHeight * (sprite.width / sprite.height);
+  blitSprite(ctx, sprite, centreX - boxWidth / 2, groundY - boxHeight * foot, boxWidth, boxHeight);
+}
+
 export interface DrawnSprite {
   source: CanvasImageSource;
   width: number;
@@ -1216,6 +1241,10 @@ export interface DrawnSprite {
    */
   sx?: number;
   sy?: number;
+  /** Cell height as a multiple of the figure's own height. 1 when they match. */
+  margin?: number;
+  /** Where in the cell the figure's feet sit, as a fraction of cell height. */
+  footFrac?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -1248,7 +1277,19 @@ interface AtlasMeta {
 }
 
 const ATLAS_META: AtlasMeta = { walkFrames: 6, strikeFrames: 4 };
-export const ATLAS_FRAME = 64;
+
+/**
+ * Atlas cell geometry.
+ *
+ * LPC's base layers are 64px, but its weapons are not — a mace swing is
+ * authored on a 192px grid centred on the same body — so cells carry a margin
+ * and the figure occupies the middle `ATLAS_LOGICAL` of it. Keep these in step
+ * with `CELL` and `LOGICAL` in `scripts/lpc/compose.mjs`.
+ */
+export const ATLAS_CELL = 96;
+export const ATLAS_LOGICAL = 64;
+const ATLAS_MARGIN = ATLAS_CELL / ATLAS_LOGICAL;
+const ATLAS_FOOT = (ATLAS_CELL / 2 + ATLAS_LOGICAL / 2) / ATLAS_CELL;
 
 const atlasByKey = new Map<string, string>();
 for (const [path, url] of Object.entries(ATLAS_URLS)) {
@@ -1258,9 +1299,16 @@ for (const [path, url] of Object.entries(ATLAS_URLS)) {
 
 const atlasImages = new Map<string, HTMLImageElement | null>();
 
-/** The decoded atlas for a card and side, or null until it is ready. */
-function atlasFor(card: CardDefinition, team: Team): HTMLImageElement | null {
-  const key = `${card.modelId}_${team}`;
+/**
+ * The decoded atlas for a card, or null until it is ready.
+ *
+ * One atlas serves both sides. Team used to be baked in as a coloured sash,
+ * which doubled the payload of the single largest thing in the build for a
+ * detail three pixels wide; allegiance is now a ring on the ground, drawn by
+ * the entity renderer.
+ */
+function atlasFor(card: CardDefinition): HTMLImageElement | null {
+  const key = card.modelId;
   if (!atlasByKey.has(key)) return null;
 
   const cached = atlasImages.get(key);
@@ -1277,16 +1325,13 @@ function atlasFor(card: CardDefinition, team: Team): HTMLImageElement | null {
 }
 
 /** True when this card has real character art available. */
-export function hasAtlas(card: CardDefinition, team: Team): boolean {
-  return atlasByKey.has(`${card.modelId}_${team}`);
+export function hasAtlas(card: CardDefinition): boolean {
+  return atlasByKey.has(card.modelId);
 }
 
 /** Kick off decoding for every atlas a match can use. */
 export function warmAtlases(cards: readonly CardDefinition[]): void {
-  for (const card of cards) {
-    atlasFor(card, 0);
-    atlasFor(card, 1);
-  }
+  for (const card of cards) atlasFor(card);
 }
 
 /**
@@ -1337,7 +1382,7 @@ export function spriteFor(
    * poses, back row above front row. A unit shows its back on the near side
    * and its face on the far side, which is what the team index selects.
    */
-  const atlas = atlasFor(card, team);
+  const atlas = atlasFor(card);
   if (atlas) {
     const { walkFrames, strikeFrames } = ATLAS_META;
     const column =
@@ -1346,10 +1391,12 @@ export function spriteFor(
         : Math.min(walkFrames - 1, Math.max(0, Math.floor(phase * walkFrames)));
     return {
       source: atlas,
-      width: ATLAS_FRAME,
-      height: ATLAS_FRAME,
-      sx: column * ATLAS_FRAME,
-      sy: team === 0 ? 0 : ATLAS_FRAME,
+      width: ATLAS_CELL,
+      height: ATLAS_CELL,
+      sx: column * ATLAS_CELL,
+      sy: team === 0 ? 0 : ATLAS_CELL,
+      margin: ATLAS_MARGIN,
+      footFrac: ATLAS_FOOT,
     };
   }
 
@@ -1388,6 +1435,36 @@ export function portraitFor(card: CardDefinition, team: Team = 0): HTMLCanvasEle
   const { canvas, ctx } = makeCell();
   drawFigure(ctx, { phase: 0, team, tint: card.tint, spec: modelFor(card), isHero: card.isHero, strike: 0 });
   return canvas;
+}
+
+/**
+ * The card's real character art, addressed as a CSS background.
+ *
+ * Card faces were rasterising the procedural fallback figure into a data URL
+ * even for cards that had a proper atlas, so the hand and the deck builder
+ * showed a different — and much cruder — creature than the board did. They
+ * also paid for it: rasterising four hundred portraits on the main thread is
+ * seconds of frozen UI when the collection opens.
+ *
+ * Neither is necessary. The atlas is already a decoded image the browser has
+ * in memory, and one cell of it is a portrait. Handing back the URL and the
+ * grid lets CSS do the cropping, which costs nothing and is always in step
+ * with what the unit looks like in play.
+ *
+ * The front-facing row, because a portrait should look at you.
+ */
+export interface AtlasPortrait {
+  url: string;
+  /** Background size and position, as percentages, for a one-cell crop. */
+  size: string;
+  position: string;
+}
+
+export function atlasPortrait(card: CardDefinition): AtlasPortrait | null {
+  const url = atlasByKey.get(card.modelId);
+  if (!url) return null;
+  const cols = ATLAS_META.walkFrames + ATLAS_META.strikeFrames;
+  return { url, size: `${cols * 100}% 200%`, position: '0% 100%' };
 }
 
 const portraitCache = new Map<string, string>();

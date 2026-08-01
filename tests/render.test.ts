@@ -36,6 +36,26 @@ vi.mock('@render/sprites', async () => {
       dw: number,
       dh: number,
     ) => ctx.drawImage({} as CanvasImageSource, dx, dy, dw, dh),
+    // Figures are anchored by their ground point and sized by the figure
+    // rather than the atlas cell around it; the mock reproduces the same box
+    // so the geometry assertions below still mean something.
+    blitFigure: (
+      ctx: CanvasRenderingContext2D,
+      sprite: { width: number; height: number; margin?: number; footFrac?: number },
+      centreX: number,
+      groundY: number,
+      figureHeight: number,
+    ) => {
+      const boxHeight = figureHeight * (sprite.margin ?? 1);
+      const boxWidth = boxHeight * (sprite.width / sprite.height);
+      ctx.drawImage(
+        {} as CanvasImageSource,
+        centreX - boxWidth / 2,
+        groundY - boxHeight * (sprite.footFrac ?? 1),
+        boxWidth,
+        boxHeight,
+      );
+    },
     modelFor: (card: { modelId: string }) =>
       models.modelSpec(card.modelId, { body: 'humanoid', head: 'none', weapon: 'none', accessory: 'none', scale: 1, build: 'normal', trim: 'sash' }),
   };
@@ -95,6 +115,7 @@ function recordingContext() {
     strokeText: () => {},
     measureText: () => ({ width: 10 }),
     createLinearGradient: () => ({ addColorStop: () => {} }),
+    createRadialGradient: () => ({ addColorStop: () => {} }),
     fillRect: (x: number, y: number, w: number, h: number) => {
       rects.push({ x, y, w, h, fill: String(context.fillStyle) });
     },

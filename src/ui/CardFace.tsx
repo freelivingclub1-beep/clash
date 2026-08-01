@@ -11,9 +11,18 @@
  * it.
  */
 
-import { forwardRef } from 'react';
+import { forwardRef, type CSSProperties } from 'react';
 import { type CardDefinition } from '@cards/schema';
-import { portraitDataUrl } from '@render/sprites';
+import { atlasPortrait, portraitDataUrl, type AtlasPortrait } from '@render/sprites';
+
+/** One atlas cell as a background, cropped by CSS rather than by a canvas. */
+function atlasStyle(atlas: AtlasPortrait): CSSProperties {
+  return {
+    backgroundImage: `url(${atlas.url})`,
+    backgroundSize: atlas.size,
+    backgroundPosition: atlas.position,
+  };
+}
 
 export interface CardFaceProps {
   card: CardDefinition;
@@ -31,11 +40,13 @@ export function CardFace({ card, showName = true }: CardFaceProps) {
    * not claim one.
    */
   const isSpell = card.category === 'Spell';
-  const portrait = isSpell ? '' : portraitDataUrl(card);
+  const atlas = isSpell ? null : atlasPortrait(card);
+  const portrait = isSpell || atlas ? '' : portraitDataUrl(card);
 
   return (
     <div className={`card-face${isSpell ? ' spell' : ''}`} style={{ background: card.tint }}>
       {isSpell && <span className="spell-glyph" />}
+      {atlas && <span className="card-portrait atlas" style={atlasStyle(atlas)} />}
       {/* Empty when no canvas was available to rasterise with; the tint and
           name still carry the card, exactly as they did before. */}
       {portrait && <img className="card-portrait" src={portrait} alt="" draggable={false} />}
@@ -64,7 +75,8 @@ export function CardFace({ card, showName = true }: CardFaceProps) {
 export const DragPortrait = forwardRef<HTMLDivElement, { card: CardDefinition }>(
   function DragPortrait({ card }, ref) {
     const isSpell = card.category === 'Spell';
-    const portrait = isSpell ? '' : portraitDataUrl(card);
+    const atlas = isSpell ? null : atlasPortrait(card);
+    const portrait = isSpell || atlas ? '' : portraitDataUrl(card);
     return (
       <div
         ref={ref}
@@ -72,6 +84,7 @@ export const DragPortrait = forwardRef<HTMLDivElement, { card: CardDefinition }>
         style={{ background: card.tint }}
       >
         {isSpell && <span className="spell-glyph" />}
+        {atlas && <span className="card-portrait atlas" style={atlasStyle(atlas)} />}
         {portrait && <img src={portrait} alt="" draggable={false} />}
         <span className="drag-portrait-cost">{card.aetherCost}</span>
       </div>

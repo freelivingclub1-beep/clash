@@ -284,6 +284,16 @@ body {
   pointer-events: none;
 }
 
+/* One cell of the character atlas, cropped by background-size rather than
+   rasterised into a data URL. The cell carries a margin for weapon arcs, so
+   the portrait is scaled up past the frame to fill it with the figure. */
+.card-portrait.atlas {
+  display: block;
+  background-repeat: no-repeat;
+  transform: translate(-50%, -50%) scale(1.35);
+  transform-origin: center;
+}
+
 /* A blast, not a body. Concentric rings read as an area effect at 60px wide
    and cost nothing to draw — spells have no figure on the board to borrow. */
 .spell-glyph {

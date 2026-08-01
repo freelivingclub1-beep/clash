@@ -22,7 +22,7 @@ import { DAMAGE_RAMP_STACK_CAP, PROJECTILE_SPEED, TICK_HZ } from '@sim/constants
 import type { Entity, MatchState, Team } from '@sim/types';
 import type { MatchRunner } from '@game/match';
 import { TILE_W, TILE_H, tileToLogical } from './camera';
-import { blitSprite, modelFor, spriteFor } from './sprites';
+import { blitFigure, modelFor, spriteFor } from './sprites';
 import { type Element, ELEMENT_LOOKS, elementOf } from './elements';
 import { texturePattern } from './textures';
 
@@ -33,6 +33,42 @@ const TEAM_COLOURS: Record<Team, { primary: string; dark: string }> = {
   0: { primary: '#4a9eff', dark: '#1b4f8a' },
   1: { primary: '#ff6b5b', dark: '#8a2f24' },
 };
+
+/**
+ * The coloured disc a unit stands on.
+ *
+ * Two rings rather than one filled ellipse: a soft inner wash so the figure
+ * sits in a pool of its own colour, and a brighter rim so the shape survives
+ * against grass, stone and the river alike. Drawn under the figure, never over
+ * it, so a scrum of bodies stays legible.
+ */
+function teamRing(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  radius: number,
+  team: Team,
+): void {
+  const colours = TEAM_COLOURS[team];
+  const wash = ctx.createRadialGradient(x, y, 0, x, y, radius);
+  wash.addColorStop(0, team === 0 ? 'rgba(74,158,255,0.55)' : 'rgba(255,107,91,0.55)');
+  wash.addColorStop(0.7, team === 0 ? 'rgba(74,158,255,0.3)' : 'rgba(255,107,91,0.3)');
+  wash.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(1, 0.5);
+  ctx.fillStyle = wash;
+  ctx.beginPath();
+  ctx.arc(0, 0, radius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = colours.primary;
+  ctx.lineWidth = 2.2;
+  ctx.globalAlpha = 0.85;
+  ctx.beginPath();
+  ctx.arc(0, 0, radius * 0.82, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
 
 function healthBar(
   ctx: CanvasRenderingContext2D,
@@ -111,6 +147,17 @@ function drawTroop(
   ctx.ellipse(screenX, screenY, radius * 0.9 * spawnScale, radius * 0.45 * spawnScale, 0, 0, Math.PI * 2);
   ctx.fill();
 
+  /*
+   * Allegiance ring.
+   *
+   * The character art used to be built twice, once with a blue sash and once
+   * with a red one, which doubled the largest asset in the game so that a
+   * three-pixel band could say whose side a unit was on. It never read at
+   * phone size anyway. A ring on the ground does — it is the convention of the
+   * genre for exactly this reason — and it costs nothing to draw.
+   */
+  teamRing(ctx, screenX, screenY, radius * 0.95 * spawnScale, entity.team);
+
   if (entity.invisibleTicks > 0) ctx.globalAlpha = 0.35;
 
   /*
@@ -129,10 +176,12 @@ function drawTroop(
       : 0;
 
   const sprite = spriteFor(card, entity.team, walkPhase(entity, tick), strike);
-  // Sprites are authored feet-at-the-bottom, so the draw box is anchored to
-  // the entity's ground position rather than centred on it.
+  // Sprites stand on a point, so the draw box is anchored to the entity's
+  // ground position rather than centred on it. `drawHeight` is the height of
+  // the *figure*; an atlas cell is larger, to leave room for weapon arcs, and
+  // `blitFigure` places the cell around the figure.
   const drawHeight = radius * 4.2 * spawnScale;
-  const drawWidth = drawHeight * (sprite.width / sprite.height);
+  const drawWidth = drawHeight;
   const footY = screenY - lift;
 
   // The lunge rides on top of the swing rather than replacing it: the arm
@@ -142,14 +191,7 @@ function drawTroop(
   const lungeX = (fxToFloat(entity.faceX) / facingLength) * lungeStrength * radius * 0.45;
   const lungeY = (fxToFloat(entity.faceY) / facingLength) * lungeStrength * radius * 0.25;
 
-  blitSprite(
-    ctx,
-    sprite,
-    screenX - drawWidth / 2 + lungeX,
-    footY - drawHeight - lungeY,
-    drawWidth,
-    drawHeight,
-  );
+  blitFigure(ctx, sprite, screenX + lungeX, footY - lungeY, drawHeight);
 
   ctx.globalAlpha = 1;
 
@@ -275,8 +317,10 @@ function drawBuilding(
   ctx.fillStyle = 'rgba(0,0,0,0.3)';
   ctx.fillRect(screenX - size * 0.42, screenY, size * 0.84, 3);
 
+  teamRing(ctx, screenX, screenY, size * 0.46, entity.team);
+
   const sprite = spriteFor(card, entity.team, 0);
-  blitSprite(ctx, sprite, screenX - size / 2, screenY - size, size, size);
+  blitFigure(ctx, sprite, screenX, screenY, size);
 
   healthBar(ctx, screenX, screenY - size - 20, size * 1.1, entity.hp / entity.maxHp, entity.team);
 

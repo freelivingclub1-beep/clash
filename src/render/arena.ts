@@ -32,7 +32,7 @@ import {
   tileToLogical,
 } from './camera';
 import { texturePattern } from './textures';
-import { blitSprite, spriteFor } from './sprites';
+import { blitFigure, spriteFor } from './sprites';
 import { tryGetCard } from '@cards/registry';
 import { formationOffsets } from '@sim/entities';
 import { fxToFloat } from '@sim/math/fixed';
@@ -414,14 +414,13 @@ export function drawPlacementGhost(
     const lift = card.isFlying ? TILE_H * 0.9 : 0;
 
     const sprite = spriteFor(card, ownerTeam, 0);
-    const drawWidth = drawHeight * (sprite.width / sprite.height);
 
     ctx.fillStyle = 'rgba(0,0,0,0.25)';
     ctx.beginPath();
     ctx.ellipse(at.x, at.y, radius * 0.8, radius * 0.4, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    blitSprite(ctx, sprite, at.x - drawWidth / 2, at.y - lift - drawHeight, drawWidth, drawHeight);
+    blitFigure(ctx, sprite, at.x, at.y - lift, drawHeight);
   }
 
   ctx.restore();
