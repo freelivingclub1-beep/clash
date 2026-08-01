@@ -59,3 +59,45 @@ Each atlas is a strip: nine walk frames then six strike frames, with the
 back-facing row above the front-facing row. Which row a unit draws from is
 decided by its side, so you see your own troops from behind and the enemy
 head-on.
+
+
+---
+
+## Quadruped animals
+
+Some cards are animals, and the Universal LPC pack has none — its wolf is a
+wolf's head on a human body, which is a werewolf. Elite Hounds, a card whose
+entire identity is that it is a pack of dogs, shipped as a small armoured
+humanoid in a visor because nothing else was available.
+
+The four-legged sprites come from **[Stendhal](https://github.com/arianne/stendhal)**,
+by the Arianne Project — Miguel Angel Blanch Lardin and contributors. Most of
+the original graphics are by **Anders Asplund (Danter)**; the wolf specifically
+is credited in `doc/AUTHORS.txt` to **Kim Purnell (Samoa)**.
+
+Stendhal is distributed under the **GNU General Public License version 2 or
+later**. The "or later" matters: it is what lets these combine with the GPL-3
+portion of the LPC pack in a single distributed work. This build therefore
+carries GPL-3 obligations, which is the licensing position it was already in.
+
+### What was changed
+
+`scripts/beasts/build.mjs` rewrites each sheet into the same atlas shape the
+humanoid figures use. Stendhal's grid is three frames across and four
+directions down, in the same row order as LPC — away, right, toward, left — so
+the two facings this game draws come from the same rows. Beyond that:
+
+- Frames are trimmed to the sheet's shared ink box before scaling, because the
+  source frames are padded and scaling the frame rather than the animal leaves
+  a hound the size of a house cat. One box for the whole sheet, not one per
+  frame, or the walk cycle jitters in place instead of striding.
+- The walk plays out and back across the three frames rather than looping
+  through them, since the middle frame is a neutral stand and cycling through
+  it reads as a limp.
+- There is no attack animation to borrow — Stendhal animates an attack by
+  moving the sprite — so the strike frames are the extremes of the stride,
+  under the forward lunge the entity renderer already applies.
+- Elite Hounds is recoloured from the grey wolf toward a Doberman coat. The
+  source's lightness curve is preserved, so the shading is the artist's.
+
+Nothing is redrawn. Frames are cropped, reordered, resampled and recoloured.

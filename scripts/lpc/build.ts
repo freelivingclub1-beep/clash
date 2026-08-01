@@ -22,6 +22,7 @@ import { selectableCards } from '../../src/cards/registry';
 import { MODELS } from '../../src/render/models';
 import type { BodyPlan, BuildKind, ModelSpec, WeaponKind } from '../../src/render/models';
 import { readSheet, listEntries, composeAtlas, encode, recolour, type Layer } from './compose.mjs';
+import { BEASTS } from '../beasts/recipe.mjs';
 
 const SRC = process.env.LPC_DIR ?? '/tmp/lpc/lpc-runtime-zips/zips';
 const OUT = 'src/assets/characters';
@@ -508,11 +509,26 @@ function build(): void {
   const done = new Set<string>();
   let made = 0;
   let missing = 0;
+  let skipped = 0;
 
   for (const card of cards) {
     const spec = MODELS[card.modelId];
     if (!spec || done.has(card.modelId)) continue;
     done.add(card.modelId);
+
+    /*
+     * Some cards are animals, and this pack has none.
+     *
+     * LPC is entirely bipedal — its wolf is a wolf's head on a man's body —
+     * so a card whose identity is that it is a pack of dogs is drawn from the
+     * quadruped sheets by `scripts/beasts` instead. Both write into the same
+     * directory under the model's own name, so without this the humanoid
+     * build would silently paint a small armoured man over every hound.
+     */
+    if (card.modelId in BEASTS) {
+      skipped++;
+      continue;
+    }
 
     const layers = layersFor(card.modelId, spec);
     if (layers.length === 0) {
@@ -535,7 +551,10 @@ function build(): void {
     `${OUT}/manifest.json`,
     JSON.stringify({ walkFrames: WALK_FRAMES, strikeFrames: STRIKE_FRAMES, files: manifest }, null, 1),
   );
-  console.log(`wrote ${made} atlases for ${cards.length} cards (${missing} skipped)`);
+  console.log(
+    `wrote ${made} atlases for ${cards.length} cards ` +
+      `(${missing} with no layers, ${skipped} drawn as animals)`,
+  );
   if (!existsSync(`${OUT}/manifest.json`)) throw new Error('manifest not written');
 }
 

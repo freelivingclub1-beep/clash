@@ -16,7 +16,9 @@
     "assets:fetch": "node scripts/lpc/fetch.mjs",
     "assets:characters": "vite-node scripts/lpc/build.ts",
     "assets:fx-fetch": "node scripts/fx/fetch.mjs",
-    "assets:effects": "node scripts/fx/build.mjs"
+    "assets:effects": "node scripts/fx/build.mjs",
+    "assets:beast-fetch": "node scripts/beasts/fetch.mjs",
+    "assets:beasts": "node scripts/beasts/build.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",
