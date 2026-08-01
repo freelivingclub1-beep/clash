@@ -106,6 +106,7 @@ export function hashMatchState(state: MatchState): number {
     fold(entity.deployTimer);
     fold(entity.freezeTicks + entity.stunTicks * 7 + entity.slowTicks * 13);
     fold(entity.rageTicks + entity.poisonTicks * 7 + entity.invisibleTicks * 13);
+    fold(entity.markedTicks);
     fold(entity.goalTowerIndex);
     fold(entity.passiveCharges + entity.passiveTimer * 7 + entity.passiveTargetId * 13);
     fold(entity.chargeDistance + entity.shieldBreakTicks * 7 + (entity.charging ? 1 : 0) * 13);

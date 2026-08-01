@@ -93,6 +93,11 @@ export interface Entity {
   abilityTicks: number;
   /** Untargetable while > 0. */
   invisibleTicks: number;
+  /**
+   * Ticks remaining on an enemy mark. While this is running the entity takes
+   * `MARK_DAMAGE_MULTIPLIER` times damage from every source.
+   */
+  markedTicks: number;
   /** Entity forced to attack this one, for taunt effects. */
   tauntSourceId: number;
 

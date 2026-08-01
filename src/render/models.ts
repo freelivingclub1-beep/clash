@@ -215,6 +215,41 @@ export const MODELS: Record<string, ModelSpec> = {
   pyreDrake: model('winged', 'visor', 'staff', 'halo', 1.0),
   gloomArcher: model('humanoid', 'skull', 'bow', 'cape', 0.92),
   boltPair: model('mech', 'crest', 'staff', 'backpack', 0.75),
+
+  // --- the menagerie wave ---------------------------------------------------
+  // Thirty figures for thirty mechanics. Each is a distinct
+  // body|head|weapon|accessory tuple, which `tests/models.test.ts` enforces, so
+  // no two cards in the game can ever be mistaken for each other on the board.
+  blightFang: model('serpent', 'horned', 'claws', 'none', 0.95),
+  miasmaAdept: model('humanoid', 'mask', 'staff', 'cape', 0.9),
+  concussor: model('brute', 'visor', 'hammer', 'shield', 1.15),
+  powderMule: model('quadruped', 'none', 'bomb', 'backpack', 0.95),
+  doomseed: model('insect', 'none', 'bomb', 'halo', 1.0),
+  railLance: model('mech', 'visor', 'cannon', 'backpack', 1.05),
+  harpoonTurret: model('structure', 'visor', 'spear', 'none', 1.1),
+  cleaver: model('brute', 'mask', 'axe', 'none', 1.05),
+  gustPriest: model('humanoid', 'wizardHat', 'staff', 'wings', 0.92),
+  bloodwing: model('winged', 'beak', 'claws', 'cape', 0.78),
+  sanguineKnight: model('humanoid', 'visor', 'scythe', 'cape', 1.05),
+  spotter: model('humanoid', 'hood', 'bow', 'backpack', 0.8),
+  nightblade: model('wraith', 'visor', 'dagger', 'cape', 0.85),
+  undyingSentinel: model('golem', 'crown', 'sword', 'halo', 1.15),
+  boneReaper: model('wraith', 'skull', 'scythe', 'banner', 1.05),
+  boulderRoller: model('golem', 'none', 'hammer', 'backpack', 1.2),
+  runeBearer: model('humanoid', 'crest', 'staff', 'shield', 0.95),
+  rustbeak: model('winged', 'beak', 'drill', 'none', 0.85),
+  chainbinder: model('humanoid', 'horned', 'claws', 'banner', 0.95),
+  aegisMatron: model('humanoid', 'crown', 'staff', 'shield', 1.0),
+  twinbow: model('humanoid', 'visor', 'bow', 'wings', 0.9),
+  aetherLeech: model('orb', 'mask', 'staff', 'halo', 0.8),
+  skyPiercer: model('mech', 'crest', 'spear', 'wings', 0.95),
+  cloudLancer: model('winged', 'helm', 'spear', 'cape', 0.85),
+  warmason: model('structure', 'crest', 'hammer', 'banner', 1.15),
+  titanshell: model('shelled', 'horned', 'claws', 'shield', 1.4),
+  dreadSerpent: model('serpent', 'crown', 'claws', 'wings', 1.35),
+  emberwing: model('winged', 'crest', 'bomb', 'wings', 0.9),
+  glassSentinel: model('orb', 'visor', 'dagger', 'none', 0.75),
+  thornCaller: model('insect', 'crest', 'spear', 'backpack', 0.88),
 };
 
 export function modelSpec(modelId: string, fallback: ModelSpec): ModelSpec {

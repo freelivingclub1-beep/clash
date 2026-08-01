@@ -34,6 +34,17 @@ function runDeathEffect(state: MatchState, entity: Entity): void {
     }
     case 'DeathBomb': {
       const radius = fx(Number(card.deathEffectParam) || 2);
+      /*
+       * A blast hits whatever is standing in it.
+       *
+       * `applyDamageAtPoint` filters by the *card's* targeting, which is right
+       * for an attack and wrong for a corpse detonating: a building-seeking
+       * card would otherwise leave a bomb that could only hurt buildings, so
+       * the troops that killed it walked away untouched. The shape is forced
+       * to a plain blast for the same reason — a cone has no facing to use
+       * once its owner is dead.
+       */
+      const blast = { ...card, targetPriority: 'AirAndGround' as const, damageType: 'AreaSplash' as const };
       applyDamageAtPoint(
         state,
         entity.team,
@@ -41,7 +52,7 @@ function runDeathEffect(state: MatchState, entity: Entity): void {
         entity.y,
         radius,
         card.deathEffectDamage,
-        card,
+        blast,
         stats.statusTicks,
         NO_TARGET,
       );

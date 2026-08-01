@@ -29,6 +29,7 @@ export function statusEffects(state: MatchState): void {
     if (entity.rageTicks > 0) entity.rageTicks--;
     if (entity.abilityTicks > 0) entity.abilityTicks--;
     if (entity.invisibleTicks > 0) entity.invisibleTicks--;
+    if (entity.markedTicks > 0) entity.markedTicks--;
 
     if (entity.slowTicks > 0) {
       entity.slowTicks--;

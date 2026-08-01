@@ -146,6 +146,7 @@ function blankEntity(id: number, team: Team, kind: Entity['kind']): Entity {
     isHero: false,
     abilityTicks: 0,
     invisibleTicks: 0,
+    markedTicks: 0,
     tauntSourceId: NO_TARGET,
     passiveCharges: 0,
     passiveTimer: 0,
@@ -448,7 +449,17 @@ export interface DamageOptions {
    * a share back and forth forever.
    */
   passives?: boolean;
+  /**
+   * This blow came from a spell rather than from a unit's attack.
+   *
+   * Only `spell_ward` reads it, and it needs to: the ward negates one *spell*
+   * outright, which is a different promise from absorbing one hit of any kind.
+   */
+  spell?: boolean;
 }
+
+/** How much harder a marked target is hit. See the `mark_target` passive. */
+export const MARK_DAMAGE_MULTIPLIER = 1.4;
 
 export function applyDamage(
   state: MatchState,
@@ -458,6 +469,37 @@ export function applyDamage(
   options: DamageOptions = {},
 ): number {
   if (!target.alive || amount <= 0) return 0;
+
+  const targetStats = resolveStats(target.cardId, target.level, target.evolved);
+
+  /*
+   * A ward eats one whole spell, however large.
+   *
+   * Checked before the shield layer so the two do not both spend on the same
+   * blow, and before any damage is computed so the negation is total rather
+   * than a reduction — that difference is the entire card.
+   */
+  if (
+    options.spell &&
+    targetStats.card.passiveId === 'spell_ward' &&
+    target.passiveCharges > 0
+  ) {
+    target.passiveCharges = 0;
+    state.events.push({
+      type: 'shieldBreak',
+      entityId: target.id,
+      team: target.team,
+      x: target.x,
+      y: target.y,
+    });
+    return 0;
+  }
+
+  // A marked target takes more from every source, which is what makes the
+  // marker worth playing behind a push and worthless played alone.
+  if (target.markedTicks > 0) {
+    amount = Math.round(amount * MARK_DAMAGE_MULTIPLIER);
+  }
 
   /*
    * Shields are a separate durability layer with overkill absorption, not a
@@ -499,6 +541,30 @@ export function applyDamage(
   if (target.kind === 'tower' && target.dormant) target.dormant = false;
 
   if (target.hp <= 0) {
+    /*
+     * Second wind, before death is committed.
+     *
+     * This has to happen here rather than in an `onDamaged` hook: that hook
+     * only runs for a victim that *survived* the blow, so a passive about not
+     * dying could never see the blow that killed it.
+     */
+    if (targetStats.card.passiveId === 'revive_once' && target.passiveCharges > 0) {
+      target.passiveCharges = 0;
+      target.hp = Math.max(1, Math.round(target.maxHp * targetStats.card.passiveMagnitude));
+      // It comes back where it fell, and briefly stunned, so getting back up
+      // costs it the tempo that makes reviving a genuine trade rather than a
+      // flat doubling of its health.
+      target.stunTicks = Math.max(target.stunTicks, Math.round(TICK_HZ * 0.8));
+      state.events.push({
+        type: 'ability',
+        team: target.team,
+        hook: 'Revive',
+        x: target.x,
+        y: target.y,
+      });
+      return dealt;
+    }
+
     target.hp = 0;
     target.alive = false;
     state.needsCompaction = true;
@@ -510,13 +576,12 @@ export function applyDamage(
   // for it themselves, but self-replication and damage sharing must trigger
   // on spell damage too.
   if (dealt > 0 && options.passives !== false) {
-    const stats = resolveStats(target.cardId, target.level, target.evolved);
-    passiveHooks(stats.card.passiveId)?.onDamaged?.(
+    passiveHooks(targetStats.card.passiveId)?.onDamaged?.(
       state,
       target,
       attacker,
       dealt,
-      stats.card.passiveMagnitude,
+      targetStats.card.passiveMagnitude,
     );
   }
   return dealt;

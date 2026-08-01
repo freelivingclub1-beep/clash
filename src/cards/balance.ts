@@ -220,6 +220,44 @@ export const PASSIVE_EPP_COST: Record<string, number> = {
    * the card that carries it is deliberately fragile once it is up.
    */
   tunnel: 900,
+
+  // --- the menagerie wave ---------------------------------------------------
+
+  /** Heals itself for a share of what it deals. Worthless against burst. */
+  lifesteal: 260,
+  /**
+   * Paints a target so *everything* hits it harder.
+   *
+   * Priced above what it does for the card carrying it, because the card
+   * carrying it is not where the value lands — a marker played alone is two
+   * aether of nothing, and played behind a committed push it is the largest
+   * damage multiplier in the set.
+   */
+  mark_target: 300,
+  /** One colossal opening blow out of stealth, then an ordinary body. */
+  ambush: 280,
+  /**
+   * Gets back up once. Effectively a second health pool, so it is the dearest
+   * of this wave; the discount against simply buying that much health is the
+   * tempo it loses lying down, and that it returns where it fell.
+   */
+  revive_once: 380,
+  /** Permanently stronger per kill. Fed by exactly the chaff that answers it. */
+  harvest: 250,
+  /** Damage scales with unobstructed distance run. Blocking early beats late. */
+  momentum: 220,
+  /** Negates one whole spell of any size. Spent by the cheapest one thrown. */
+  spell_ward: 300,
+  /** Permanently blunts what it hits. Decisive on bruisers, blank on towers. */
+  sunder: 240,
+  /** Echoes damage onto the victim's neighbours. Punishes tight formations. */
+  tether: 270,
+  /** Steady trickle of repair to everything near it. Beats chip, loses to burst. */
+  aura_guard: 280,
+  /** Strikes a second target in reach at the same instant, at full weight. */
+  split_shot: 290,
+  /** Drains the defender's aether while it connects. Attacks the clock. */
+  siphon: 200,
   /**
    * Tops nearby allies up to a small armour layer every few seconds.
    *

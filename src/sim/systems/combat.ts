@@ -154,11 +154,13 @@ export function applyDamageAtPoint(
 ): void {
   const foe = enemyOf(team);
   const passive = passiveHooks(card.passiveId);
+  // Spell-sourced damage is flagged so `spell_ward` can negate one outright.
+  const damageOpts = { spell: card.category === 'Spell' };
 
   if (radius <= 0) {
     const primary = findEntity(state, primaryId);
     if (isTargetable(primary) && primary.team === foe) {
-      applyDamage(state, primary, damageAgainst(primary, damage, card), attacker);
+      applyDamage(state, primary, damageAgainst(primary, damage, card), attacker, damageOpts);
       if (card.onHitStatus !== 'None') applyStatus(card, primary, statusTicks);
       if (attacker) passive?.onHit?.(state, attacker, primary, card.passiveMagnitude);
       state.events.push({ type: 'hit', x, y, damage, splash: false });
@@ -224,7 +226,7 @@ export function applyDamageAtPoint(
       const nearY = attacker.y + Math.round(lineY * along);
       if (fxLenSq(entity.x - nearX, entity.y - nearY) > radiusSq) continue;
 
-      applyDamage(state, entity, damageAgainst(entity, damage, card), attacker);
+      applyDamage(state, entity, damageAgainst(entity, damage, card), attacker, damageOpts);
       if (card.onHitStatus !== 'None') applyStatus(card, entity, statusTicks);
       if (entity.id === primaryId) passive?.onHit?.(state, attacker, entity, card.passiveMagnitude);
     }
@@ -252,7 +254,7 @@ export function applyDamageAtPoint(
       const toY = entity.y - (attacker as Entity).y;
       if (toX * faceX + toY * faceY < 0) continue;
     }
-    applyDamage(state, entity, damageAgainst(entity, damage, card), attacker);
+    applyDamage(state, entity, damageAgainst(entity, damage, card), attacker, damageOpts);
     if (card.onHitStatus !== 'None') applyStatus(card, entity, statusTicks);
     /*
      * A stun spell earths itself into everything it caught.

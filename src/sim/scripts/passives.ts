@@ -662,6 +662,276 @@ register('tunnel', {
 });
 
 // ---------------------------------------------------------------------------
+// The menagerie wave
+//
+// Twelve mechanics that had no representation in the set. Each one is written
+// against the same scratch fields the older passives share — `passiveCharges`,
+// `passiveTimer`, `passiveTargetId` — rather than adding entity state, so the
+// determinism hash is untouched and a saved replay still resolves.
+// ---------------------------------------------------------------------------
+
+/**
+ * Lifesteal — heals itself for a share of the damage it deals.
+ *
+ * The inverse of a shield: it buys nothing against burst, and everything
+ * against a long fight it is winning. A lone tank feeds it indefinitely; a
+ * spell removes it before the healing ever compounds.
+ */
+register('lifesteal', {
+  onHit: (_state, self, victim, magnitude) => {
+    if (!self.alive || victim.kind === 'tower') return;
+    const stats = resolveStats(self.cardId, self.level, self.evolved);
+    const healed = Math.round(stats.damage * magnitude);
+    self.hp = Math.min(self.maxHp, self.hp + healed);
+  },
+});
+
+/**
+ * Mark — whatever it last hit takes more damage from *everything*.
+ *
+ * The card does almost no damage itself. Its value is entirely in what your
+ * other cards do to the thing it has pointed at, which makes it worthless
+ * played alone and disproportionate played behind a push. `passiveTargetId`
+ * holds the mark; the multiplier is applied in `applyDamage`.
+ */
+register('mark_target', {
+  onHit: (_state, self, victim, magnitude) => {
+    if (victim.kind === 'tower') return;
+    self.passiveTargetId = victim.id;
+    victim.markedTicks = Math.max(victim.markedTicks, Math.round(TICK_HZ * magnitude));
+  },
+});
+
+/**
+ * Ambush — colossal opening blow, then an ordinary body.
+ *
+ * Invisible until it strikes, and the strike is multiplied. Unlike Blink
+ * Strike, which repositions on spawn and then fights normally, this one is
+ * *only* the first hit: after it lands, what remains is a weak unit standing
+ * in the open where you chose to put it.
+ */
+register('ambush', {
+  onSpawn: (_state, self) => {
+    self.passiveCharges = 1;
+    self.invisibleTicks = Math.round(TICK_HZ * 30);
+  },
+  onHit: (state, self, victim, magnitude) => {
+    if (self.passiveCharges <= 0) return;
+    self.passiveCharges = 0;
+    self.invisibleTicks = 0;
+    const stats = resolveStats(self.cardId, self.level, self.evolved);
+    applyDamage(state, victim, Math.round(stats.damage * magnitude), self, { passives: false });
+  },
+});
+
+/**
+ * Guardian — dies once and gets back up.
+ *
+ * Returns at a fraction of its pool the first time it would be killed. Any
+ * card that trades evenly with it loses the rematch, so the counter is not to
+ * out-damage it but to overkill it — or to walk past it, since it comes back
+ * exactly where it fell rather than where the fight has moved to.
+ */
+register('revive_once', {
+  onSpawn: (_state, self) => {
+    self.passiveCharges = 1;
+  },
+  onDamaged: (_state, self, _attacker, _amount, magnitude) => {
+    if (self.hp > 0 || self.passiveCharges <= 0) return;
+    self.passiveCharges = 0;
+    self.alive = true;
+    self.hp = Math.max(1, Math.round(self.maxHp * magnitude));
+    self.stunTicks = Math.max(self.stunTicks, Math.round(TICK_HZ * 0.6));
+  },
+});
+
+/**
+ * Harvest — permanently stronger for every body it puts down.
+ *
+ * Scales with the *defence* thrown at it, which inverts the usual read: the
+ * cheap chaff that answers most pushes feeds this one instead. Left alone
+ * through a swarm it becomes a genuine problem; answered with one big body it
+ * gains nothing at all. `passiveCharges` counts the kills.
+ */
+register('harvest', {
+  onHit: (_state, self, victim, magnitude) => {
+    if (victim.alive || victim.kind === 'tower') return;
+    self.passiveCharges = Math.min(10, self.passiveCharges + 1);
+    // Growth is banked as health as well, so it visibly swells.
+    const stats = resolveStats(self.cardId, self.level, self.evolved);
+    const gain = Math.round(stats.damage * magnitude);
+    self.maxHp += gain;
+    self.hp = Math.min(self.maxHp, self.hp + gain);
+  },
+});
+
+/**
+ * Momentum — hits for more the further it has run unobstructed.
+ *
+ * Related to `charge`, and deliberately not the same: charge is a threshold
+ * that fires once and resets, this is a continuous curve with no ceiling
+ * inside a lane. Blocking it early is worth far more than blocking it late,
+ * so a cheap body dropped at the bridge is a real answer to an expensive card.
+ */
+register('momentum', {
+  onTick: (_state, self) => {
+    const moving = self.stepX !== 0 || self.stepY !== 0;
+    if (moving) self.passiveTimer = Math.min(self.passiveTimer + 1, Math.round(TICK_HZ * 8));
+    else self.passiveTimer = 0;
+  },
+  onHit: (state, self, victim, magnitude) => {
+    const seconds = self.passiveTimer / TICK_HZ;
+    if (seconds < 1) return;
+    const stats = resolveStats(self.cardId, self.level, self.evolved);
+    const bonus = Math.round(stats.damage * magnitude * Math.min(4, seconds));
+    self.passiveTimer = 0;
+    if (bonus > 0) applyDamage(state, victim, bonus, self, { passives: false });
+  },
+});
+
+/**
+ * Spell Ward — the first spell that touches it does nothing.
+ *
+ * Not damage reduction: a full negation of one instance, however large, which
+ * makes it the only card in the set that punishes a Rocket rather than dying
+ * to it. Answered by any *cheap* spell, since the ward spends itself on
+ * whatever lands first — including a two-aether Zap.
+ */
+register('spell_ward', {
+  onSpawn: (_state, self) => {
+    self.passiveCharges = 1;
+  },
+});
+
+/**
+ * Sunder — every blow permanently blunts what it hits.
+ *
+ * Reduces the victim's damage rather than its health, so it wins fights it
+ * could never win on stats and does nothing whatsoever to a tower. Against a
+ * swarm it is close to useless — each body is blunted separately and they die
+ * before it matters — and against one expensive bruiser it is decisive.
+ */
+register('sunder', {
+  onHit: (_state, _self, victim, magnitude) => {
+    if (victim.kind === 'tower' || victim.kind === 'building') return;
+    const floor = Math.round(victim.damage * 0.35);
+    victim.damage = Math.max(floor, victim.damage - Math.round(victim.damage * magnitude));
+  },
+});
+
+/**
+ * Tether — damage dealt to the thing it has hooked is echoed onto its
+ * neighbours.
+ *
+ * Turns a tight formation into a liability. The wider the opposing push is
+ * spread, the less this does, which is the exact opposite of every splash card
+ * in the set and the reason it is not simply another one.
+ */
+register('tether', {
+  onHit: (state, self, victim, magnitude) => {
+    /*
+     * Enemies of *self*, measured from the victim.
+     *
+     * `enemiesInRadius` derives the hostile team from the entity it is given,
+     * so passing the victim here would have searched for the victim's enemies
+     * — that is, our own side — and echoed the damage onto the allies standing
+     * next to the thing we just hit.
+     */
+    const radiusSq = Math.round((fx(2.2) * fx(2.2)) / FX_ONE);
+    const foe = enemyOf(self.team);
+    for (const other of state.entities) {
+      if (other.team !== foe || !isTargetable(other)) continue;
+      if (fxLenSq(other.x - victim.x, other.y - victim.y) > radiusSq) continue;
+      if (other.id === victim.id || other.kind === 'tower') continue;
+      const stats = resolveStats(self.cardId, self.level, self.evolved);
+      applyDamage(state, other, Math.round(stats.damage * magnitude), self, { passives: false });
+      state.events.push({
+        type: 'arc',
+        team: self.team,
+        x: victim.x,
+        y: victim.y,
+        toX: other.x,
+        toY: other.y,
+        kind: 'chain',
+      });
+    }
+  },
+});
+
+/**
+ * Bulwark Aura — allies nearby take a share of their damage as pushback
+ * instead.
+ *
+ * Reads as a slow-moving wall of protection that has to keep up with the push
+ * it is protecting. Distinct from `aura_shield`, which hands out a pool that
+ * absorbs a whole blow: this reduces every hit by a little and never runs out,
+ * so it beats sustained chip and loses to a single heavy strike.
+ */
+register('aura_guard', {
+  onTick: (state, self, magnitude) => {
+    if (self.passiveTimer > 0) {
+      self.passiveTimer--;
+      return;
+    }
+    self.passiveTimer = Math.round(TICK_HZ * 0.5);
+    for (const ally of alliesInRadius(state, self, fx(3.4))) {
+      if (ally.kind === 'tower') continue;
+      // Refunds a fraction of the ally's missing health each half-second, which
+      // is a reduction expressed after the fact rather than a pre-hit shield.
+      const missing = ally.maxHp - ally.hp;
+      if (missing <= 0) continue;
+      ally.hp = Math.min(ally.maxHp, ally.hp + Math.round(missing * magnitude));
+    }
+  },
+});
+
+/**
+ * Split Shot — strikes a second target at the same instant.
+ *
+ * Not `chain_attack`: there is no arc and no falloff, the second victim simply
+ * takes the same blow, and it must be within the card's own reach rather than
+ * near the first. So it is a card that wants two things in front of it and is
+ * strictly a single-target card against one.
+ */
+register('split_shot', {
+  onHit: (state, self, victim, magnitude) => {
+    const stats = resolveStats(self.cardId, self.level, self.evolved);
+    const reach = fx(stats.card.attackRange + 1);
+    for (const other of enemiesInRadius(state, self, reach)) {
+      if (other.id === victim.id) continue;
+      applyDamage(state, other, Math.round(stats.damage * magnitude), self, { passives: false });
+      state.events.push({
+        type: 'shoot',
+        cardId: self.cardId,
+        team: self.team,
+        x: self.x,
+        y: self.y,
+        faceX: other.x - self.x,
+        faceY: other.y - self.y,
+      });
+      break;
+    }
+  },
+});
+
+/**
+ * Siphon — drains the *aether* of whoever it damages.
+ *
+ * The only card in the set that attacks the resource rather than the board.
+ * It is deliberately feeble in a fight: every second it survives in front of a
+ * tower costs the defender tempo they cannot see on the health bars, which is
+ * a pressure no other card applies.
+ */
+register('siphon', {
+  onHit: (state, self, victim, magnitude) => {
+    if (victim.kind !== 'tower') return;
+    const foe = state.players[enemyOf(self.team)];
+    const drained = Math.round(magnitude);
+    foe.aetherPoints = Math.max(0, foe.aetherPoints - drained);
+  },
+});
+
+// ---------------------------------------------------------------------------
 
 export function passiveHooks(passiveId: string): PassiveHooks | undefined {
   if (!passiveId || passiveId === 'none') return undefined;
