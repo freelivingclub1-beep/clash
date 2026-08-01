@@ -1,0 +1,960 @@
+/* Mobile-first, portrait-locked shell. The canvas letterboxes itself, so the
+   page only has to supply a dark surround and a fixed 9:16 stage. */
+
+:root {
+  --bg: #0c0f16;
+  --panel: #1a2030;
+  --panel-light: #232b3d;
+  --border: #33405a;
+  --text: #e8edf7;
+  --muted: #8b97ad;
+  --blue: #4a9eff;
+  --red: #ff6b5b;
+  --gold: #ffd84a;
+  --aether: #d94ad9;
+  --ok: #4ad98a;
+  --danger: #ff5b5b;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  overscroll-behavior: none;
+}
+
+#root {
+  height: 100%;
+}
+
+.app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+/* The 9:16 stage every screen renders inside. */
+.stage {
+  position: relative;
+  width: min(100vw, calc(100vh * 9 / 16));
+  height: min(100vh, calc(100vw * 16 / 9));
+  background: #12161f;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* --- battle ------------------------------------------------------------- */
+
+.battle-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  display: block;
+}
+
+.battle-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
+}
+
+.battle-header {
+  height: 10%;
+  padding: 2% 3%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2%;
+  pointer-events: auto;
+}
+
+.battle-spacer {
+  flex: 1;
+}
+
+.battle-hud {
+  touch-action: none;
+  height: 25%;
+  padding: 1.5% 2.5% 2.5%;
+  background: linear-gradient(180deg, rgba(12, 15, 22, 0.75) 0%, rgba(12, 15, 22, 0.97) 22%);
+  display: flex;
+  flex-direction: column;
+  gap: 1.5%;
+  pointer-events: auto;
+}
+
+.crowns {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  font-size: clamp(12px, 3.4vw, 22px);
+}
+
+.crown-pip {
+  width: clamp(10px, 2.6vw, 18px);
+  height: clamp(10px, 2.6vw, 18px);
+  border-radius: 3px;
+  background: #3a4358;
+}
+
+.crown-pip.filled {
+  background: var(--gold);
+}
+
+.timer {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: clamp(14px, 4vw, 26px);
+  text-align: center;
+}
+
+.timer .phase {
+  display: block;
+  font-size: 0.5em;
+  color: var(--muted);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.timer.overtime {
+  color: var(--gold);
+}
+
+/* --- hand --------------------------------------------------------------- */
+
+.hand-row {
+  display: flex;
+  gap: 2%;
+  /* stretch, not flex-end: the tiles must fill the HUD band's height rather
+     than collapsing to their text and leaving a dead gap under the field. */
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
+}
+
+.next-card {
+  width: 17%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+}
+
+.next-card .label {
+  font-size: clamp(7px, 1.8vw, 11px);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.hand-cards {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 2%;
+  min-height: 0;
+  /* Cards keep a card-like 3:4 ratio and centre in the band rather than
+     stretching to fill it, which made them read as tall slabs. */
+  align-items: center;
+}
+
+.card-tile {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  max-height: 100%;
+  border-radius: 8px;
+  border: 2px solid var(--border);
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  user-select: none;
+  cursor: grab;
+  /*
+   * Without this the browser claims a touch drag for scrolling and fires
+   * pointercancel instead of pointermove, so a card could be pressed but
+   * never dragged onto the board. This is the single line that made
+   * deploying work on touch at all.
+   */
+  touch-action: none;
+  -webkit-user-drag: none;
+  transition:
+    transform 0.09s ease,
+    border-color 0.09s ease;
+  min-height: 0;
+}
+
+.card-tile.playable {
+  border-color: var(--gold);
+}
+
+.card-tile.dragging {
+  /* The lifted card is represented by the floating copy under the pointer,
+     so the slot it came from reads as empty rather than duplicated. */
+  opacity: 0.25;
+  transform: scale(0.94);
+  cursor: grabbing;
+}
+
+/* The placement preview is the troop itself, drawn on the field by the
+   renderer — no floating DOM card, which covered the board you were reading. */
+
+.card-tile.unaffordable {
+  opacity: 0.45;
+}
+
+.card-tile.evo-ready {
+  border-color: #ff8adf;
+  box-shadow: 0 0 12px rgba(255, 138, 223, 0.55);
+}
+
+.card-art {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(8px, 2.2vw, 13px);
+  font-weight: 700;
+  text-align: center;
+  padding: 4px;
+  line-height: 1.15;
+  color: #10141c;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+/* --- Card face: the unit's own figure, wherever a card is shown ---------- */
+
+.card-face {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  overflow: hidden;
+  border-radius: 5px;
+}
+
+/* A soft vignette so a pale figure still reads against a pale tint. */
+.card-face::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse at 50% 38%,
+    rgba(255, 255, 255, 0.32),
+    rgba(0, 0, 0, 0.28) 78%
+  );
+  pointer-events: none;
+}
+
+.card-portrait {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  transform: translate(-50%, -50%);
+  width: 92%;
+  height: 92%;
+  object-fit: contain;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.45));
+  pointer-events: none;
+}
+
+/* One cell of the character atlas, cropped by background-size rather than
+   rasterised into a data URL. The cell carries a margin for weapon arcs, so
+   the portrait is scaled up past the frame to fill it with the figure. */
+.card-portrait.atlas {
+  display: block;
+  background-repeat: no-repeat;
+  transform: translate(-50%, -50%) scale(1.35);
+  transform-origin: center;
+}
+
+/* A blast, not a body. Concentric rings read as an area effect at 60px wide
+   and cost nothing to draw — spells have no figure on the board to borrow. */
+.spell-glyph {
+  position: absolute;
+  left: 50%;
+  top: 44%;
+  transform: translate(-50%, -50%);
+  width: 68%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.9) 0 16%,
+    rgba(255, 255, 255, 0) 17% 31%,
+    rgba(255, 255, 255, 0.6) 32% 41%,
+    rgba(255, 255, 255, 0) 42% 60%,
+    rgba(255, 255, 255, 0.34) 61% 68%,
+    rgba(255, 255, 255, 0) 69%
+  );
+  pointer-events: none;
+}
+
+.card-name {
+  position: relative;
+  width: 100%;
+  padding: 2px 3px;
+  background: rgba(10, 14, 22, 0.72);
+  color: #f2f5fa;
+  font-size: clamp(7px, 2vw, 11px);
+  font-weight: 700;
+  line-height: 1.1;
+  text-align: center;
+  letter-spacing: 0.01em;
+}
+
+/* --- Drag portrait -------------------------------------------------------
+   Rides under the pointer so you can see *what* is about to land while the
+   translucent troops on the field show you *where*. Round and small on
+   purpose: a card-shaped panel covered the board you were reading. */
+
+.drag-portrait {
+  position: fixed;
+  /* Moved with a transform by its owner rather than by left/top through React,
+     so dragging stays on the compositor instead of re-laying-out every move. */
+  left: 0;
+  top: 0;
+  will-change: transform;
+  width: 68px;
+  height: 68px;
+  margin: -80px 0 0 -34px;
+  border-radius: 50%;
+  border: 2px solid var(--gold);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+  z-index: 40;
+  overflow: hidden;
+}
+
+.drag-portrait img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+.drag-portrait-cost {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--aether);
+  border: 2px solid #2a1030;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Top-left, over the portrait, rather than bottom-right over the name.
+   Sharing a row with the name strip meant the badge sat on the last letter of
+   every card wider than five characters — "Archers" read as "Archer". Padding
+   the name around it only crushed the text instead, because the two clamps
+   ate most of a 72px tile. */
+.card-cost {
+  position: absolute;
+  left: 3px;
+  top: 3px;
+  z-index: 2;
+  min-width: clamp(16px, 4.4vw, 26px);
+  height: clamp(16px, 4.4vw, 26px);
+  border-radius: 50%;
+  background: var(--aether);
+  color: #fff;
+  font-size: clamp(9px, 2.6vw, 15px);
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #2a1030;
+}
+
+/* Top-right: the cost badge now owns the top-left corner. */
+.evo-badge {
+  position: absolute;
+  right: 3px;
+  top: 3px;
+  z-index: 2;
+  font-size: clamp(6px, 1.7vw, 10px);
+  font-weight: 800;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: #ff8adf;
+  color: #2a1030;
+  letter-spacing: 0.04em;
+}
+
+/* --- aether bar --------------------------------------------------------- */
+
+.aether-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.aether-value {
+  font-weight: 800;
+  font-size: clamp(12px, 3.4vw, 20px);
+  color: var(--aether);
+  min-width: 2.6em;
+  font-variant-numeric: tabular-nums;
+}
+
+.aether-bar {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 2px;
+  height: clamp(10px, 2.8vw, 18px);
+}
+
+.aether-cell {
+  background: #2a1f33;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+/*
+ * Fill is derived in CSS from a single `--aether` custom property written on an
+ * ancestor once a frame, and the cell's own static `--i` index. Keeping the
+ * arithmetic here is what lets the bar animate at the full frame rate without
+ * React re-rendering the battle tree thirty times a second to move it.
+ */
+.aether-fill {
+  height: 100%;
+  width: calc(clamp(0, calc(var(--aether, 0) - var(--i)), 1) * 100%);
+  background: linear-gradient(180deg, #f06be0, #c22bb8);
+}
+
+/* --- ability button ----------------------------------------------------- */
+
+.ability-button {
+  position: absolute;
+  right: 3%;
+  bottom: 26%;
+  width: clamp(44px, 13vw, 84px);
+  height: clamp(44px, 13vw, 84px);
+  border-radius: 50%;
+  border: 3px solid var(--gold);
+  background: radial-gradient(circle at 35% 30%, #4a3c10, #1d1706);
+  color: var(--gold);
+  font-weight: 800;
+  font-size: clamp(8px, 2.2vw, 13px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.ability-button:disabled {
+  border-color: #4a5163;
+  color: #6b7488;
+  cursor: not-allowed;
+}
+
+.ability-button .cost {
+  font-size: 0.8em;
+  color: var(--aether);
+}
+
+/* --- generic screens ---------------------------------------------------- */
+
+.screen {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.screen h1 {
+  margin: 0;
+  font-size: clamp(20px, 5.5vw, 32px);
+}
+
+.screen h2 {
+  margin: 0;
+  font-size: clamp(14px, 3.8vw, 20px);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.button {
+  border: none;
+  border-radius: 10px;
+  padding: 14px 18px;
+  font-size: clamp(13px, 3.6vw, 18px);
+  font-weight: 700;
+  background: var(--blue);
+  color: #08111f;
+  cursor: pointer;
+}
+
+.button.secondary {
+  background: var(--panel-light);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.button.danger {
+  background: var(--danger);
+  color: #1a0505;
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.stat-line {
+  display: flex;
+  justify-content: space-between;
+  font-size: clamp(11px, 3vw, 15px);
+  padding: 3px 0;
+  gap: 12px;
+}
+
+.stat-line .label {
+  color: var(--muted);
+}
+
+.muted {
+  color: var(--muted);
+  font-size: clamp(10px, 2.8vw, 14px);
+}
+
+.error {
+  color: var(--danger);
+  font-size: clamp(10px, 2.8vw, 14px);
+}
+
+/* --- deck builder ------------------------------------------------------- */
+
+.deck-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.deck-slot {
+  aspect-ratio: 3 / 4;
+  border-radius: 8px;
+  border: 2px dashed var(--border);
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(8px, 2.2vw, 12px);
+  text-align: center;
+  padding: 4px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+
+.deck-slot.filled {
+  border-style: solid;
+}
+
+.deck-slot.selected {
+  border-color: var(--gold);
+  box-shadow: 0 0 10px rgba(255, 216, 74, 0.5);
+}
+
+.deck-slot .role {
+  position: absolute;
+  top: 2px;
+  left: 3px;
+  font-size: 0.75em;
+  color: var(--muted);
+  z-index: 2;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+}
+
+/* The portrait fills the slot; the caption sits over its foot. */
+.deck-slot .card-face {
+  position: absolute;
+  inset: 0;
+  border-radius: 6px;
+}
+
+.deck-slot .slot-caption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 2px 3px;
+  background: rgba(10, 14, 22, 0.78);
+  color: #f2f5fa;
+  line-height: 1.1;
+}
+
+.collection-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+/* --- card maker --------------------------------------------------------- */
+
+.form-section {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.form-section > .title {
+  font-weight: 800;
+  font-size: clamp(12px, 3.2vw, 16px);
+  color: var(--gold);
+  letter-spacing: 0.04em;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field > label {
+  font-size: clamp(10px, 2.7vw, 13px);
+  color: var(--muted);
+}
+
+.field input[type='text'],
+.field input[type='number'],
+.field select,
+.field textarea {
+  background: #10141d;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 8px 10px;
+  font-size: clamp(11px, 3vw, 15px);
+  font-family: inherit;
+  width: 100%;
+}
+
+.field input[type='range'] {
+  width: 100%;
+  accent-color: var(--blue);
+}
+
+.field.inline {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.field .value {
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  font-weight: 700;
+  font-size: clamp(11px, 3vw, 15px);
+}
+
+.field.invalid input,
+.field.invalid select {
+  border-color: var(--danger);
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: clamp(11px, 3vw, 15px);
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.level-table {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 3px;
+  font-size: clamp(7px, 1.9vw, 10px);
+  text-align: center;
+}
+
+.level-table .cell {
+  background: #10141d;
+  border-radius: 3px;
+  padding: 3px 1px;
+}
+
+.level-table .cell.baseline {
+  background: #2b3550;
+  color: var(--gold);
+}
+
+.nav-bar {
+  display: flex;
+  gap: 6px;
+  padding: 8px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.nav-bar button {
+  flex: 1;
+  padding: 8px;
+  font-size: clamp(10px, 2.8vw, 14px);
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.nav-bar button.active {
+  background: var(--panel-light);
+  color: var(--text);
+  border-color: var(--blue);
+}
+
+/* --- result overlay ----------------------------------------------------- */
+
+.result-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(8, 11, 18, 0.88);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  pointer-events: auto;
+  z-index: 10;
+}
+
+.result-overlay .headline {
+  font-size: clamp(28px, 9vw, 56px);
+  font-weight: 900;
+  letter-spacing: 0.04em;
+}
+
+.result-overlay .headline.win {
+  color: var(--gold);
+}
+
+.result-overlay .headline.loss {
+  color: var(--red);
+}
+
+/* --- match intro countdown ---------------------------------------------- */
+
+.countdown-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 9;
+}
+
+.countdown-overlay .count {
+  font-size: clamp(64px, 22vw, 180px);
+  font-weight: 900;
+  color: var(--gold);
+  text-shadow: 0 0 40px rgba(255, 216, 74, 0.55), 0 6px 0 rgba(0, 0, 0, 0.5);
+  animation: countPop 0.8s ease-out;
+}
+
+@keyframes countPop {
+  0% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+  25% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.85);
+    opacity: 0.15;
+  }
+}
+
+/* --- post-match summary -------------------------------------------------- */
+
+.crown-result {
+  display: flex;
+  gap: 10px;
+}
+
+.crown-big {
+  font-size: clamp(26px, 8vw, 46px);
+  color: #3a4358;
+  filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5));
+}
+
+.crown-big.filled {
+  color: var(--gold);
+  animation: crownDrop 0.5s ease-out backwards;
+}
+
+.crown-big.filled:nth-child(2) {
+  animation-delay: 0.12s;
+}
+.crown-big.filled:nth-child(3) {
+  animation-delay: 0.24s;
+}
+
+@keyframes crownDrop {
+  from {
+    transform: translateY(-30px) scale(1.6);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.result-stats {
+  min-width: 74%;
+}
+
+/* The Card Maker's live card preview: one hand-sized tile, centred. */
+.maker-preview {
+  display: flex;
+  justify-content: center;
+  padding: 4px 0 10px;
+}
+
+.maker-preview .card-tile {
+  width: 96px;
+  flex: none;
+}
+
+/* --- collection, grouped by deck role ------------------------------------ */
+
+.role-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.role-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border-left: 3px solid var(--gold);
+  padding-left: 7px;
+}
+
+.role-heading strong {
+  font-size: clamp(11px, 3vw, 15px);
+  letter-spacing: 0.02em;
+}
+
+.role-heading .muted {
+  font-size: clamp(8px, 2.2vw, 11px);
+  line-height: 1.25;
+}
+
+/* --- elixir trade readout ------------------------------------------------ */
+
+.trade-meter {
+  position: absolute;
+  right: 2.5%;
+  transform: translateY(-118%);
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: rgba(12, 15, 22, 0.72);
+  border: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.trade-meter .trade-label {
+  font-size: clamp(7px, 1.8vw, 10px);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.trade-meter .trade-value {
+  font-size: clamp(11px, 3vw, 16px);
+  font-weight: 800;
+}
+
+.trade-up .trade-value,
+span.trade-up {
+  color: var(--ok);
+}
+.trade-down .trade-value,
+span.trade-down {
+  color: var(--danger);
+}
+.trade-even .trade-value {
+  color: var(--muted);
+}

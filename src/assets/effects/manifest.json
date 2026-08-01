@@ -1,0 +1,106 @@
+{
+ "frame": 100,
+ "frames": 16,
+ "effects": {
+  "magicspell": {
+   "frames": 16,
+   "size": 100,
+   "sourceFrames": 75
+  },
+  "magic8": {
+   "frames": 16,
+   "size": 100,
+   "sourceFrames": 61
+  },
+  "bluefire": {
+   "frames": 16,
+   "size": 100,
+   "sourceFrames": 61
+  },
+  "casting": {
+   "frames": 16,
+   "size": 100,
+   "sourceFrames": 73
+  },
+  "magickahit": {
+   "frames": 16,
+   "size": 100,
+   "sourceFrames": 41
+  },
+  "flamelash": {
+   "frames": 16,
+   "size": 100,
+   "sourceFrames": 46
+  },
+  "firespin": {
+   "frames": 16,
+   "size": 100,
+   "sourceFrames": 61
+  },
+  "protectioncircle": {
+   "frames": 16,
+   "size": 100,
+   "sourceFrames": 61
+  },
+  "brightfire": {
+   "frames": 16,
+   "size": 100,
+   "sourceFrames": 61
+  },
+  "weaponhit": {
+   "frames": 16,
+   "size": 100,
+   "sourceFrames": 31
+  },
+  "fire": {
+   "frames": 16,
+   "size": 100,
+   "sourceFrames": 61
+  },
+  "nebula": {
+   "frames": 16,
+   "size": 100,
+   "sourceFrames": 61
+  },
+  "vortex": {
+   "frames": 16,
+   "size": 100,
+   "sourceFrames": 61
+  },
+  "phantom": {
+   "frames": 16,
+   "size": 100,
+   "sourceFrames": 61
+  },
+  "loading": {
+   "frames": 16,
+   "size": 100,
+   "sourceFrames": 121
+  },
+  "sunburn": {
+   "frames": 16,
+   "size": 100,
+   "sourceFrames": 61
+  },
+  "felspell": {
+   "frames": 16,
+   "size": 100,
+   "sourceFrames": 91
+  },
+  "midnight": {
+   "frames": 16,
+   "size": 100,
+   "sourceFrames": 61
+  },
+  "freezing": {
+   "frames": 16,
+   "size": 100,
+   "sourceFrames": 86
+  },
+  "magicbubbles": {
+   "frames": 16,
+   "size": 100,
+   "sourceFrames": 61
+  }
+ }
+}
