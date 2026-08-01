@@ -9,8 +9,8 @@
  */
 
 import { getCard } from '@cards/registry';
-import { fx } from '../math/fixed';
-import { AP_PER_AETHER, TICK_HZ } from '../constants';
+import { fx, fxMul } from '../math/fixed';
+import { AP_PER_AETHER, PROJECTILE_SPEED, TICK_HZ } from '../constants';
 import { canDeployAt } from '../nav/grid';
 import {
   findEntity,
@@ -102,8 +102,18 @@ function resolveDeploy(
 
   if (isSpell) {
     const stats = resolveStats(cardId, level, evolved);
-    // Spells arrive from behind their caster so the throw reads on screen.
-    const approach = command.team === 0 ? fx(-4) : fx(4);
+    /*
+     * Spells arrive from behind their caster, and the distance is a time.
+     *
+     * Projectiles move at a fixed speed, so throwing from a fixed *offset*
+     * meant every spell in the game took the same four-ninths of a second to
+     * land whatever it was. Deriving the offset from the card's own travel
+     * time makes the throw legible: the shot enters from off-screen behind
+     * you, arcs over the board and lands, which is a beat the defender can
+     * see coming rather than a blast that appears.
+     */
+    const tiles = fxMul(PROJECTILE_SPEED, fx(card.castTravelSeconds * TICK_HZ));
+    const approach = command.team === 0 ? -tiles : tiles;
     spawnProjectile(state, {
       team: command.team,
       cardId,
@@ -119,14 +129,12 @@ function resolveDeploy(
       splashRadius: stats.splashRadius,
       appliesStatus: card.onHitStatus !== 'None',
     });
-    state.events.push({
-      type: 'spell',
-      cardId,
-      team: command.team,
-      x: center.x,
-      y: center.y,
-      radius: stats.splashRadius,
-    });
+    /*
+     * No event here. The blast is announced when the spell *lands*, from the
+     * projectile system — emitting it at cast time played the whole explosion
+     * at the destination while the shot was still in the air, which is
+     * precisely why a spell looked like it hit the instant you dropped it.
+     */
     return;
   }
 

@@ -17,6 +17,9 @@ export const FIREBALL = defineCard({
   unlockArena: 1,
   description: 'Annnnnd... Fireball. Deals high area damage and knocks back survivors.',
   tint: '#e0703f',
+  // The signature arc: a full second in the air, entering from behind
+  // your side of the board. Long enough to read, short enough to hit.
+  castTravelSeconds: 1.05,
   baseHealth: 0,
   damage: 689,
   damageType: 'AreaSplash',
@@ -39,6 +42,9 @@ export const ZAP = defineCard({
   unlockArena: 5,
   description: 'Zaps enemies, briefly stunning them and resetting their attack.',
   tint: '#e0d43f',
+  // A crack, not a throw. Instantaneous in all but name, which is the
+  // whole identity of the card: you cannot dodge it, you can only spend it.
+  castTravelSeconds: 0.12,
   baseHealth: 0,
   damage: 192,
   damageType: 'AreaSplash',
@@ -60,6 +66,9 @@ export const ARROWS = defineCard({
   unlockArena: 1,
   description: 'Arrows pepper a large area, damaging everything hit.',
   tint: '#9fd05f',
+  // A volley loosed on a shallow arc — quicker than a lobbed shell and
+  // slower than a bolt.
+  castTravelSeconds: 0.7,
   baseHealth: 0,
   damage: 288,
   damageType: 'AreaSplash',

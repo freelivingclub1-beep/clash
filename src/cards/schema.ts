@@ -193,6 +193,19 @@ const combatSchema = z.object({
    * that takes.
    */
   deployAnywhere: z.boolean().default(false),
+  /**
+   * Seconds a spell spends in the air before it lands.
+   *
+   * Spells were always projectiles rather than instant effects — the damage
+   * has always resolved on arrival — but every one of them flew the same
+   * fixed distance, and a Zap took as long to arrive as a Fireball. Naming the
+   * time per card is what lets a Zap crack immediately and a heavy blast take
+   * a beat you can react to, which is the difference between a spell you
+   * dodge and a spell that simply happens.
+   *
+   * Ignored for anything that is not a spell.
+   */
+  castTravelSeconds: z.number().min(0).max(3).default(0.85),
 });
 
 /** E — special ability & effect hooks. */

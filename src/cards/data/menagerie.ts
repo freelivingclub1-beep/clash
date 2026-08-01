@@ -84,6 +84,8 @@ export const MIASMA = defineCard({
   unlockArena: 9,
   description: 'No impact damage. A cloud that rots everything standing in it.',
   tint: '#6f8f4a',
+  // A heavy flask, thrown high.
+  castTravelSeconds: 0.95,
   baseHealth: 0,
   damage: 260,
   damageType: 'AreaSplash',

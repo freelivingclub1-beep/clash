@@ -37,6 +37,8 @@ export const SNARE = defineCard({
   unlockArena: 4,
   description: 'Wide net of grasping roots. No damage — everything caught crawls.',
   tint: '#6f7f52',
+  // Thrown low and flat.
+  castTravelSeconds: 0.55,
   baseHealth: 0,
   damage: 0,
   damageType: 'AreaSplash',
@@ -69,6 +71,8 @@ export const SPLINTER_BOMB = defineCard({
   unlockArena: 6,
   description: 'Tight, heavy blast. Miss by a tile and it kills nothing.',
   tint: '#b5563c',
+  // Lobbed. You get a moment to see where it will land.
+  castTravelSeconds: 0.85,
   baseHealth: 0,
   damage: 620,
   damageType: 'AreaSplash',
@@ -92,6 +96,8 @@ export const WARCRY = defineCard({
   unlockArena: 8,
   description: 'Your troops in the blast hit faster and move faster for a while.',
   tint: '#c4487a',
+  // A shout carries as fast as one. Nothing to see coming.
+  castTravelSeconds: 0.2,
   baseHealth: 0,
   damage: 0,
   damageType: 'AreaSplash',

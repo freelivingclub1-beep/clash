@@ -313,6 +313,9 @@ export const GLACIER = defineCard({
   unlockArena: 9,
   description: 'Freezes everything in a wide area for 2 seconds. Light damage.',
   tint: '#a8d8f0',
+  // Slow and unmistakable. The counterplay is the second you get
+  // between the throw and the freeze.
+  castTravelSeconds: 1.0,
   baseHealth: 0,
   damage: 120,
   damageType: 'AreaSplash',
@@ -339,6 +342,8 @@ export const SUNBEAM = defineCard({
   unlockArena: 8,
   description: 'A tight, high-damage burst. Small radius, hits hard.',
   tint: '#f0d060',
+  // Called down rather than thrown, so it is quick.
+  castTravelSeconds: 0.5,
   baseHealth: 0,
   damage: 420,
   damageType: 'AreaSplash',

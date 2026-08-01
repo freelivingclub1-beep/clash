@@ -62,6 +62,25 @@ export function projectiles(state: MatchState): void {
       shooter?.alive ? shooter : undefined,
     );
 
+    /*
+     * A spell announces itself where and when it lands.
+     *
+     * This used to be pushed at cast time, so the bloom, the shockwave and the
+     * screen shake all fired at the destination while the shot was still in
+     * the air — the explosion arrived before the fireball did, and the throw
+     * that was already being simulated was invisible behind it.
+     */
+    if (stats.card.category === 'Spell') {
+      state.events.push({
+        type: 'spell',
+        cardId: projectile.cardId,
+        team: projectile.team,
+        x: projectile.x,
+        y: projectile.y,
+        radius: projectile.splashRadius,
+      });
+    }
+
     projectile.alive = false;
     state.needsCompaction = true;
   }
