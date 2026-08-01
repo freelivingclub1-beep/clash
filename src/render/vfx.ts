@@ -44,7 +44,116 @@ type ParticleShape =
   /** Four-point twinkle, for holy and arcane motes. */
   | 'star'
   /** A flattened ring that spreads along the ground rather than expanding. */
-  | 'wave';
+  | 'wave'
+  /** Soft additive orb. The workhorse of every energy effect. */
+  | 'glow'
+  /** Additive orb with four long spikes — a lens flare, for the hottest cores. */
+  | 'flare'
+  /** Thin bright ring expanding fast, for the leading edge of a blast. */
+  | 'shock';
+
+/**
+ * Shapes that glow rather than sit flat on the board.
+ *
+ * Smoke, shards and debris are lit by the scene; energy emits its own light.
+ * Getting that distinction right is what stops a blast reading as confetti.
+ */
+const ADDITIVE_BY_DEFAULT: ReadonlySet<ParticleShape> = new Set<ParticleShape>([
+  'glow',
+  'flare',
+  'shock',
+  'flame',
+  'star',
+  'spark',
+]);
+
+/**
+ * Soft sprites, baked once and blitted thereafter.
+ *
+ * Canvas has no soft brush: a `fill()` gives a hard edge, and a hard edge is
+ * why flat particle work reads as cut paper rather than as light. Baking a
+ * radial falloff into a small offscreen canvas and drawing *that* is both
+ * softer and cheaper than a path fill per particle per frame.
+ *
+ * Keyed by colour and radius, so the working set is a couple of dozen sprites
+ * for the whole game.
+ */
+const glowCache = new Map<string, HTMLCanvasElement>();
+
+function glowSprite(colour: string, radius: number, spikes = false): HTMLCanvasElement {
+  const r = Math.max(2, Math.round(radius));
+  const key = `${colour}|${r}|${spikes ? 1 : 0}`;
+  const hit = glowCache.get(key);
+  if (hit) return hit;
+
+  const size = r * 2;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    const g = ctx.createRadialGradient(r, r, 0, r, r, r);
+    // White-hot centre fading through the element colour to nothing. The
+    // colour never reaches the very middle, which is what makes a bright core.
+    /*
+     * A small, restrained white centre. At a wide bright core, additive
+     * sprites stacked into a featureless white blob and every element looked
+     * the same again — the colour has to survive the accumulation, so the
+     * white is barely more than a highlight.
+     */
+    g.addColorStop(0, 'rgba(255,255,255,0.72)');
+    g.addColorStop(0.14, colour);
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+
+    if (spikes) {
+      // Four soft spikes make a point of light read as a flare rather than a
+      // dot — the cheapest trick there is for selling brightness.
+      const s = ctx.createLinearGradient(0, r, size, r);
+      s.addColorStop(0, 'rgba(0,0,0,0)');
+      s.addColorStop(0.5, 'rgba(255,255,255,0.5)');
+      s.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = s;
+      ctx.fillRect(0, r - Math.max(1, r * 0.07), size, Math.max(2, r * 0.14));
+      const v = ctx.createLinearGradient(r, 0, r, size);
+      v.addColorStop(0, 'rgba(0,0,0,0)');
+      v.addColorStop(0.5, 'rgba(255,255,255,0.5)');
+      v.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = v;
+      ctx.fillRect(r - Math.max(1, r * 0.07), 0, Math.max(2, r * 0.14), size);
+    }
+  }
+  glowCache.set(key, canvas);
+  return canvas;
+}
+
+/** Soft dark puff for smoke, which absorbs light rather than emitting it. */
+const smokeCache = new Map<string, HTMLCanvasElement>();
+
+function smokeSprite(colour: string, radius: number): HTMLCanvasElement {
+  const r = Math.max(3, Math.round(radius));
+  const key = `${colour}|${r}`;
+  const hit = smokeCache.get(key);
+  if (hit) return hit;
+
+  const size = r * 2;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    const g = ctx.createRadialGradient(r, r, 0, r, r, r);
+    g.addColorStop(0, colour);
+    g.addColorStop(0.55, colour);
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.globalAlpha = 0.55;
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+  }
+  smokeCache.set(key, canvas);
+  return canvas;
+}
 
 interface Particle {
   active: boolean;
@@ -58,6 +167,15 @@ interface Particle {
   colour: string;
   shape: ParticleShape;
   gravity: number;
+  /**
+   * Drawn with `lighter` rather than `source-over`.
+   *
+   * This is most of the difference between "some particles" and an effect that
+   * looks lit: overlapping additive sprites accumulate toward white, so the
+   * middle of a blast is hot and its edges are coloured, instead of every
+   * particle being the same flat swatch wherever it lands.
+   */
+  additive: boolean;
 }
 
 /**
@@ -106,6 +224,7 @@ function blankParticle(): Particle {
     colour: '#fff',
     shape: 'spark',
     gravity: 0,
+    additive: false,
   };
 }
 
@@ -172,7 +291,14 @@ export class VfxSystem {
     y: number,
     count: number,
     colour: string,
-    opts: { speed?: number; life?: number; size?: number; shape?: ParticleShape; gravity?: number } = {},
+    opts: {
+      speed?: number;
+      life?: number;
+      size?: number;
+      shape?: ParticleShape;
+      gravity?: number;
+      additive?: boolean;
+    } = {},
   ): void {
     const speed = opts.speed ?? 2.4;
     for (let i = 0; i < count; i++) {
@@ -190,10 +316,11 @@ export class VfxSystem {
       particle.colour = colour;
       particle.shape = opts.shape ?? 'spark';
       particle.gravity = opts.gravity ?? 0.012;
+      particle.additive = opts.additive ?? ADDITIVE_BY_DEFAULT.has(particle.shape);
     }
   }
 
-  ring(x: number, y: number, colour: string, size = 26, life = 320): void {
+  ring(x: number, y: number, colour: string, size = 26, life = 320, additive = true): void {
     const particle = this.nextParticle();
     particle.active = true;
     particle.x = x;
@@ -206,6 +333,7 @@ export class VfxSystem {
     particle.colour = colour;
     particle.shape = 'ring';
     particle.gravity = 0;
+    particle.additive = additive;
   }
 
   /**
@@ -282,39 +410,48 @@ export class VfxSystem {
     // than as a large flicker.
     const life = (base: number): number => Math.round(base * (0.75 + power * 0.35));
 
+    /*
+     * Every element opens the same way and diverges immediately.
+     *
+     * The flash and the hot core are what make an impact land — a real effect
+     * is brightest at the instant of contact and decays, rather than being one
+     * even puff of colour for its whole life. The element then supplies the
+     * body of the effect on top.
+     */
+    this.flash(x, y, look.core, 9 * power, life(120));
+    this.shock(x, y, look.core, 16 * power, life(200));
+
     switch (el) {
       case 'fire':
-        // Flames are the whole effect, so they are large, slow and numerous;
-        // at ember size this read as an orange dot rather than as fire.
-        this.burst(x, y, n(14), look.body, { speed: 1.5 * power, size: 7, life: life(620), shape: 'flame', gravity: -0.045 });
-        this.burst(x, y, n(7), look.core, { speed: 0.9 * power, size: 5, life: life(460), shape: 'flame', gravity: -0.06 });
-        this.burst(x, y, n(6), look.trail, { speed: 1.1 * power, size: 6, life: life(900), shape: 'smoke', gravity: -0.016 });
-        this.burst(x, y, n(8), '#ffc46b', { speed: 3.4 * power, size: 2, life: life(420), shape: 'spark', gravity: 0.03 });
-        this.ring(x, y, 'rgba(255,140,60,0.85)', 26 * power, life(340));
+        // Rolling plume: glow underneath, flame licks over it, smoke after.
+        this.burst(x, y, n(9), look.body, { speed: 1.3 * power, size: 9, life: life(560), shape: 'glow', gravity: -0.018 });
+        this.burst(x, y, n(12), look.body, { speed: 1.5 * power, size: 7, life: life(620), shape: 'flame', gravity: -0.02 });
+        this.burst(x, y, n(6), look.core, { speed: 0.9 * power, size: 5, life: life(420), shape: 'flame', gravity: -0.028 });
+        this.burst(x, y, n(7), look.trail, { speed: 1.1 * power, size: 7, life: life(980), shape: 'smoke', gravity: -0.016 });
+        this.burst(x, y, n(10), '#ffc46b', { speed: 3.6 * power, size: 2, life: life(460), shape: 'spark', gravity: 0.05 });
         break;
 
       case 'frost':
-        this.burst(x, y, n(11), look.body, { speed: 3 * power, size: 3, life: 420, shape: 'crystal', gravity: 0.03 });
-        this.burst(x, y, n(4), look.core, { speed: 1.2 * power, size: 2, life: 620, shape: 'star', gravity: -0.004 });
-        // Frost hangs around: two rings, the second slower and wider.
-        this.ring(x, y, 'rgba(190,240,255,0.9)', 22 * power, 260);
-        this.ring(x, y, 'rgba(127,216,255,0.5)', 34 * power, 620);
+        this.burst(x, y, n(7), look.body, { speed: 1.1 * power, size: 8, life: life(420), shape: 'glow', gravity: 0 });
+        this.burst(x, y, n(12), look.body, { speed: 3 * power, size: 3, life: life(460), shape: 'crystal', gravity: 0.035 });
+        this.burst(x, y, n(5), look.core, { speed: 1.2 * power, size: 3, life: life(680), shape: 'star', gravity: -0.004 });
+        this.ring(x, y, 'rgba(190,240,255,0.9)', 22 * power, life(280));
+        this.ring(x, y, 'rgba(127,216,255,0.5)', 34 * power, life(680));
         break;
 
       case 'toxic':
-        this.burst(x, y, n(9), look.body, { speed: 1.4 * power, size: 3, life: 900, shape: 'bubble', gravity: -0.018 });
-        this.burst(x, y, n(5), look.trail, { speed: 1.0 * power, size: 4, life: 1100, shape: 'smoke', gravity: -0.012 });
+        // Deliberately dull: rot should not glitter. Almost all of this is
+        // non-additive, so it sits on the board like a stain.
+        this.burst(x, y, n(10), look.body, { speed: 1.4 * power, size: 3, life: life(980), shape: 'bubble', gravity: -0.018 });
+        this.burst(x, y, n(7), look.trail, { speed: 1.0 * power, size: 7, life: life(1200), shape: 'smoke', gravity: -0.012 });
+        this.burst(x, y, n(4), look.core, { speed: 1.0 * power, size: 5, life: life(520), shape: 'glow', gravity: -0.02 });
         break;
 
       case 'storm': {
-        this.burst(x, y, n(14), look.core, { speed: 4.2 * power, size: 3, life: life(340), shape: 'spark' });
+        this.burst(x, y, n(6), look.body, { speed: 0.6 * power, size: 10, life: life(200), shape: 'glow' });
+        this.burst(x, y, n(16), look.core, { speed: 4.6 * power, size: 3, life: life(340), shape: 'spark' });
+        this.burst(x, y, 2, look.body, { speed: 1.2 * power, size: 5, life: life(260), shape: 'flare' });
         this.ring(x, y, 'rgba(255,255,255,0.95)', 18 * power, life(220));
-        this.ring(x, y, 'rgba(159,208,255,0.8)', 30 * power, life(360));
-        /*
-         * Earthing arcs. Both the count and the lifetime scale with power —
-         * at a fixed three short-lived forks a spell-sized discharge had
-         * already vanished by the time the rest of the effect was at its peak.
-         */
         const forks = Math.max(4, Math.round(4 * power));
         for (let i = 0; i < forks; i++) {
           const a = (i / forks) * Math.PI * 2 + this.random() * 0.9;
@@ -326,43 +463,76 @@ export class VfxSystem {
       }
 
       case 'water':
-        this.burst(x, y, n(10), look.body, { speed: 2.6 * power, size: 3, life: 480, shape: 'droplet', gravity: 0.06 });
-        this.burst(x, y, n(4), look.core, { speed: 1.6 * power, size: 2, life: 360, shape: 'droplet', gravity: 0.05 });
-        // Flat and spreading rather than a bubble expanding.
-        this.wave(x, y, 'rgba(120,200,240,0.85)', 30 * power, 460);
-        this.wave(x, y, 'rgba(74,168,224,0.5)', 42 * power, 640);
+        this.burst(x, y, n(6), look.body, { speed: 1.0 * power, size: 7, life: life(360), shape: 'glow' });
+        this.burst(x, y, n(12), look.body, { speed: 2.8 * power, size: 3, life: life(520), shape: 'droplet', gravity: 0.07 });
+        this.burst(x, y, n(5), look.core, { speed: 1.6 * power, size: 2, life: life(400), shape: 'droplet', gravity: 0.06 });
+        this.wave(x, y, 'rgba(120,200,240,0.85)', 30 * power, life(500));
+        this.wave(x, y, 'rgba(74,168,224,0.5)', 42 * power, life(700));
         break;
 
       case 'arcane':
-        this.burst(x, y, n(10), look.body, { speed: 2.2 * power, size: 3, life: 520, shape: 'star', gravity: -0.01 });
-        this.ring(x, y, 'rgba(180,95,224,0.9)', 24 * power, 400);
-        this.ring(x, y, 'rgba(240,216,255,0.55)', 14 * power, 560);
+        this.burst(x, y, n(8), look.body, { speed: 1.0 * power, size: 8, life: life(480), shape: 'glow', gravity: -0.01 });
+        this.burst(x, y, n(10), look.body, { speed: 2.4 * power, size: 3, life: life(560), shape: 'star', gravity: -0.012 });
+        this.ring(x, y, 'rgba(180,95,224,0.9)', 24 * power, life(440));
+        this.ring(x, y, 'rgba(240,216,255,0.55)', 14 * power, life(600));
         break;
 
       case 'holy':
-        this.burst(x, y, n(9), look.core, { speed: 1.8 * power, size: 3, life: 620, shape: 'star', gravity: -0.03 });
-        this.burst(x, y, n(5), look.body, { speed: 2.6 * power, size: 2, life: 420, shape: 'spark', gravity: -0.02 });
-        this.ring(x, y, 'rgba(255,216,74,0.9)', 26 * power, 380);
+        this.burst(x, y, 2, look.body, { speed: 0.4 * power, size: 8, life: life(460), shape: 'flare', gravity: -0.02 });
+        this.burst(x, y, n(10), look.body, { speed: 1.9 * power, size: 3, life: life(680), shape: 'star', gravity: -0.035 });
+        this.burst(x, y, n(6), look.body, { speed: 2.8 * power, size: 2, life: life(460), shape: 'spark', gravity: -0.02 });
+        this.ring(x, y, 'rgba(255,216,74,0.9)', 26 * power, life(420));
         break;
 
       case 'shadow':
-        // A dark bloom with bright motes pulling through it, so it reads as
-        // something being unmade rather than as a grey smudge.
-        this.burst(x, y, n(10), look.trail, { speed: 1.4 * power, size: 6, life: life(700), shape: 'smoke', gravity: 0.004 });
-        this.burst(x, y, n(8), look.core, { speed: 2.8 * power, size: 3, life: life(420), shape: 'star', gravity: -0.01 });
-        this.ring(x, y, 'rgba(201,176,224,0.9)', 24 * power, life(420));
-        this.ring(x, y, 'rgba(36,21,51,0.95)', 13 * power, life(560));
+        // The one effect that gets *darker* in the middle: a smoke core drawn
+        // normally, with additive motes escaping it.
+        this.burst(x, y, n(12), look.trail, { speed: 1.4 * power, size: 8, life: life(760), shape: 'smoke', gravity: 0.004 });
+        this.burst(x, y, n(9), look.core, { speed: 2.9 * power, size: 3, life: life(460), shape: 'star', gravity: -0.012 });
+        this.ring(x, y, 'rgba(201,176,224,0.9)', 24 * power, life(460));
         break;
 
       case 'steel':
       default:
-        // Struck metal: bright, fast, short, and thrown downward.
-        this.burst(x, y, n(12), '#ffffff', { speed: 4.2 * power, size: 2, life: life(240), shape: 'spark', gravity: 0.09 });
-        this.burst(x, y, n(7), look.core, { speed: 3.0 * power, size: 3, life: life(320), shape: 'shard', gravity: 0.07 });
-        this.burst(x, y, n(4), look.trail, { speed: 1.6 * power, size: 4, life: life(460), shape: 'puff', gravity: 0.01 });
-        this.ring(x, y, 'rgba(242,245,250,0.7)', 16 * power, life(200));
+        this.burst(x, y, n(14), '#ffffff', { speed: 4.4 * power, size: 2, life: life(260), shape: 'spark', gravity: 0.1 });
+        this.burst(x, y, n(6), look.core, { speed: 3.0 * power, size: 3, life: life(340), shape: 'shard', gravity: 0.08 });
+        this.burst(x, y, n(4), look.trail, { speed: 1.6 * power, size: 5, life: life(500), shape: 'puff', gravity: 0.01 });
         break;
     }
+  }
+
+  /** A single bright point at the instant of contact. */
+  private flash(x: number, y: number, colour: string, size: number, life: number): void {
+    const particle = this.nextParticle();
+    particle.active = true;
+    particle.x = x;
+    particle.y = y;
+    particle.vx = 0;
+    particle.vy = 0;
+    particle.maxLife = life;
+    particle.life = life;
+    particle.size = size;
+    particle.colour = colour;
+    particle.shape = 'flare';
+    particle.gravity = 0;
+    particle.additive = true;
+  }
+
+  /** The fast, thin leading edge of a blast. */
+  private shock(x: number, y: number, colour: string, size: number, life: number): void {
+    const particle = this.nextParticle();
+    particle.active = true;
+    particle.x = x;
+    particle.y = y;
+    particle.vx = 0;
+    particle.vy = 0;
+    particle.maxLife = life;
+    particle.life = life;
+    particle.size = size;
+    particle.colour = colour;
+    particle.shape = 'shock';
+    particle.gravity = 0;
+    particle.additive = true;
   }
 
   /** A flattened ring that spreads along the ground. */
@@ -379,6 +549,7 @@ export class VfxSystem {
     particle.colour = colour;
     particle.shape = 'wave';
     particle.gravity = 0;
+    particle.additive = true;
   }
 
   consume(events: readonly SimEvent[], viewTeam: Team): void {
@@ -612,124 +783,163 @@ export class VfxSystem {
   }
 
   drawParticles(ctx: CanvasRenderingContext2D): void {
-    for (const particle of this.particles) {
-      if (!particle.active) continue;
-      const t = particle.life / particle.maxLife;
-      ctx.globalAlpha = Math.max(0, Math.min(1, t));
-
-      switch (particle.shape) {
-        case 'ring': {
-          // Rings expand as they fade, which reads as a shockwave.
-          const grow = particle.size * (1.6 - t * 0.6);
-          ctx.strokeStyle = particle.colour;
-          ctx.lineWidth = 3 * t + 1;
-          ctx.beginPath();
-          ctx.ellipse(particle.x, particle.y, grow, grow * (TILE_H / TILE_W), 0, 0, Math.PI * 2);
-          ctx.stroke();
-          break;
-        }
-        case 'puff':
-          ctx.fillStyle = particle.colour;
-          ctx.beginPath();
-          ctx.arc(particle.x, particle.y, particle.size * (1.8 - t), 0, Math.PI * 2);
-          ctx.fill();
-          break;
-        case 'shard':
-          ctx.fillStyle = particle.colour;
-          ctx.fillRect(particle.x, particle.y, particle.size, particle.size * 1.8);
-          break;
-        case 'flame': {
-          // Tapered and taller than it is wide, shrinking as it burns out.
-          const h = particle.size * 3.2 * t;
-          const w = particle.size * (0.5 + t * 0.6);
-          ctx.fillStyle = particle.colour;
-          ctx.beginPath();
-          ctx.moveTo(particle.x, particle.y - h);
-          ctx.quadraticCurveTo(particle.x + w, particle.y - h * 0.35, particle.x + w * 0.6, particle.y);
-          ctx.quadraticCurveTo(particle.x, particle.y + w * 0.4, particle.x - w * 0.6, particle.y);
-          ctx.quadraticCurveTo(particle.x - w, particle.y - h * 0.35, particle.x, particle.y - h);
-          ctx.closePath();
-          ctx.fill();
-          break;
-        }
-        case 'crystal': {
-          const r = particle.size * (0.7 + t);
-          ctx.fillStyle = particle.colour;
-          ctx.beginPath();
-          ctx.moveTo(particle.x, particle.y - r * 1.6);
-          ctx.lineTo(particle.x + r * 0.7, particle.y);
-          ctx.lineTo(particle.x, particle.y + r * 1.6);
-          ctx.lineTo(particle.x - r * 0.7, particle.y);
-          ctx.closePath();
-          ctx.fill();
-          break;
-        }
-        case 'bubble': {
-          // Swells as it rises, so a cloud looks like it is fermenting.
-          const r = particle.size * (2.2 - t * 1.1);
-          ctx.strokeStyle = particle.colour;
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.arc(particle.x, particle.y, r, 0, Math.PI * 2);
-          ctx.stroke();
-          ctx.globalAlpha *= 0.35;
-          ctx.fillStyle = particle.colour;
-          ctx.fill();
-          ctx.globalAlpha = Math.max(0, Math.min(1, t));
-          break;
-        }
-        case 'droplet': {
-          const r = particle.size * (0.6 + t * 0.8);
-          ctx.fillStyle = particle.colour;
-          ctx.beginPath();
-          ctx.moveTo(particle.x, particle.y - r * 1.8);
-          ctx.quadraticCurveTo(particle.x + r, particle.y, particle.x, particle.y + r);
-          ctx.quadraticCurveTo(particle.x - r, particle.y, particle.x, particle.y - r * 1.8);
-          ctx.closePath();
-          ctx.fill();
-          break;
-        }
-        case 'smoke': {
-          ctx.globalAlpha *= 0.4;
-          ctx.fillStyle = particle.colour;
-          ctx.beginPath();
-          ctx.arc(particle.x, particle.y, particle.size * (2.4 - t * 1.2), 0, Math.PI * 2);
-          ctx.fill();
-          ctx.globalAlpha = Math.max(0, Math.min(1, t));
-          break;
-        }
-        case 'star': {
-          /*
-           * Two crossed bars rather than a four-lobed path. Stars are the most
-           * numerous particle in the game — holy, arcane and shadow all throw
-           * them — and a path fill per particle per frame is far dearer than a
-           * pair of rects for a twinkle a few pixels across.
-           */
-          const r = particle.size * (1.4 - t * 0.4);
-          ctx.fillStyle = particle.colour;
-          ctx.fillRect(particle.x - r, particle.y - r * 0.28, r * 2, r * 0.56);
-          ctx.fillRect(particle.x - r * 0.28, particle.y - r, r * 0.56, r * 2);
-          break;
-        }
-        case 'wave': {
-          /*
-           * Spreads along the ground instead of expanding evenly, which is
-           * what makes water read as water rather than as another shockwave.
-           */
-          const grow = particle.size * (2.2 - t * 1.2);
-          ctx.strokeStyle = particle.colour;
-          ctx.lineWidth = 4 * t + 1;
-          ctx.beginPath();
-          ctx.ellipse(particle.x, particle.y, grow, grow * 0.28, 0, 0, Math.PI * 2);
-          ctx.stroke();
-          break;
-        }
-        default:
-          ctx.fillStyle = particle.colour;
-          ctx.fillRect(particle.x, particle.y, particle.size, particle.size);
+    /*
+     * Two passes, because blend mode is not a per-particle property in canvas
+     * and flipping it per draw would cost more than the draw.
+     *
+     * Smoke first, under everything, drawn normally so it darkens the board.
+     * Then everything that emits light, drawn additively so overlapping
+     * particles accumulate toward white — which is what gives a blast a hot
+     * centre instead of a uniform wash of one colour.
+     */
+    ctx.save();
+    for (let pass = 0; pass < 2; pass++) {
+      const additivePass = pass === 1;
+      ctx.globalCompositeOperation = additivePass ? 'lighter' : 'source-over';
+      for (const particle of this.particles) {
+        if (!particle.active || particle.additive !== additivePass) continue;
+        const t = particle.life / particle.maxLife;
+        ctx.globalAlpha = Math.max(0, Math.min(1, t));
+        this.drawParticle(ctx, particle, t);
       }
     }
+    ctx.restore();
     ctx.globalAlpha = 1;
+  }
+
+  private drawParticle(ctx: CanvasRenderingContext2D, particle: Particle, t: number): void {
+    const blit = (sprite: HTMLCanvasElement, radius: number): void => {
+      ctx.drawImage(sprite, particle.x - radius, particle.y - radius, radius * 2, radius * 2);
+    };
+
+    switch (particle.shape) {
+      case 'glow':
+        blit(glowSprite(particle.colour, particle.size * 3), particle.size * 3 * (1.5 - t * 0.5));
+        break;
+
+      case 'flare':
+        blit(glowSprite(particle.colour, particle.size * 4, true), particle.size * 4 * (1.7 - t * 0.7));
+        break;
+
+      case 'shock': {
+        // The leading edge of a blast: thin, bright, and gone almost at once.
+        const grow = particle.size * (2.4 - t * 1.9);
+        ctx.strokeStyle = particle.colour;
+        ctx.lineWidth = Math.max(1, 7 * t);
+        ctx.beginPath();
+        ctx.ellipse(particle.x, particle.y, grow, grow * (TILE_H / TILE_W), 0, 0, Math.PI * 2);
+        ctx.stroke();
+        break;
+      }
+
+      case 'ring': {
+        // Rings expand as they fade, which reads as a shockwave.
+        const grow = particle.size * (1.6 - t * 0.6);
+        ctx.strokeStyle = particle.colour;
+        ctx.lineWidth = 3 * t + 1;
+        ctx.beginPath();
+        ctx.ellipse(particle.x, particle.y, grow, grow * (TILE_H / TILE_W), 0, 0, Math.PI * 2);
+        ctx.stroke();
+        break;
+      }
+
+      case 'wave': {
+        const grow = particle.size * (2.2 - t * 1.2);
+        ctx.strokeStyle = particle.colour;
+        ctx.lineWidth = 4 * t + 1;
+        ctx.beginPath();
+        ctx.ellipse(particle.x, particle.y, grow, grow * 0.28, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        break;
+      }
+
+      case 'smoke':
+        // Billows outward and drifts up as it thins.
+        blit(smokeSprite(particle.colour, particle.size * 3), particle.size * 3 * (2.2 - t * 1.1));
+        break;
+
+      case 'puff':
+        blit(smokeSprite(particle.colour, particle.size * 2), particle.size * 2 * (1.8 - t));
+        break;
+
+      case 'flame': {
+        /*
+         * A glowing core with a tapered tongue over it. The glow is what makes
+         * it look like combustion rather than an orange triangle.
+         */
+        const h = particle.size * 3.2 * t;
+        const w = particle.size * (0.5 + t * 0.6);
+        blit(glowSprite(particle.colour, particle.size * 2.2), particle.size * 2.2);
+        ctx.fillStyle = particle.colour;
+        ctx.beginPath();
+        ctx.moveTo(particle.x, particle.y - h);
+        ctx.quadraticCurveTo(particle.x + w, particle.y - h * 0.35, particle.x + w * 0.6, particle.y);
+        ctx.quadraticCurveTo(particle.x, particle.y + w * 0.4, particle.x - w * 0.6, particle.y);
+        ctx.quadraticCurveTo(particle.x - w, particle.y - h * 0.35, particle.x, particle.y - h);
+        ctx.closePath();
+        ctx.fill();
+        break;
+      }
+
+      case 'crystal': {
+        const r = particle.size * (0.7 + t);
+        ctx.fillStyle = particle.colour;
+        ctx.beginPath();
+        ctx.moveTo(particle.x, particle.y - r * 1.6);
+        ctx.lineTo(particle.x + r * 0.7, particle.y);
+        ctx.lineTo(particle.x, particle.y + r * 1.6);
+        ctx.lineTo(particle.x - r * 0.7, particle.y);
+        ctx.closePath();
+        ctx.fill();
+        break;
+      }
+
+      case 'bubble': {
+        const r = particle.size * (2.2 - t * 1.1);
+        ctx.strokeStyle = particle.colour;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(particle.x, particle.y, r, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha *= 0.3;
+        ctx.fillStyle = particle.colour;
+        ctx.fill();
+        ctx.globalAlpha = Math.max(0, Math.min(1, t));
+        break;
+      }
+
+      case 'droplet': {
+        const r = particle.size * (0.6 + t * 0.8);
+        ctx.fillStyle = particle.colour;
+        ctx.beginPath();
+        ctx.moveTo(particle.x, particle.y - r * 1.8);
+        ctx.quadraticCurveTo(particle.x + r, particle.y, particle.x, particle.y + r);
+        ctx.quadraticCurveTo(particle.x - r, particle.y, particle.x, particle.y - r * 1.8);
+        ctx.closePath();
+        ctx.fill();
+        break;
+      }
+
+      case 'star': {
+        const r = particle.size * (1.4 - t * 0.4);
+        blit(glowSprite(particle.colour, r * 2, true), r * 2);
+        break;
+      }
+
+      case 'shard':
+        ctx.fillStyle = particle.colour;
+        ctx.fillRect(particle.x, particle.y, particle.size, particle.size * 1.8);
+        break;
+
+      default:
+        // A spark is a short streak along its own motion, not a square.
+        ctx.strokeStyle = particle.colour;
+        ctx.lineWidth = Math.max(1, particle.size * 0.9);
+        ctx.beginPath();
+        ctx.moveTo(particle.x, particle.y);
+        ctx.lineTo(particle.x - particle.vx * 2.2, particle.y - particle.vy * 2.2);
+        ctx.stroke();
+    }
   }
 
   drawNumbers(ctx: CanvasRenderingContext2D): void {

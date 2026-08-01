@@ -20,6 +20,12 @@ function recordingContext() {
     strokeStyle: '#000',
     lineWidth: 1,
     globalAlpha: 1,
+    // The particle pass sets a blend mode, so it brackets itself in
+    // save/restore rather than leaving `lighter` set for the rest of the frame.
+    globalCompositeOperation: 'source-over',
+    save: () => {},
+    restore: () => {},
+    drawImage: () => {},
     beginPath: () => {},
     arc: () => {},
     ellipse: () => {},
