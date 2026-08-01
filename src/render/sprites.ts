@@ -30,6 +30,8 @@ import {
   type HeadKind,
   type WeaponKind,
   type AccessoryKind,
+  type BuildKind,
+  type TrimKind,
   MODELS,
 } from './models';
 
@@ -56,15 +58,15 @@ const TEAM_TRIM_DARK: Record<Team, string> = { 0: '#1b4f8a', 1: '#8a2f24' };
 /** Fallback body plan when a card names no model, derived from its stats. */
 export function fallbackModel(card: CardDefinition): ModelSpec {
   if (card.category === 'Building' || card.category === 'TowerTroop') {
-    return { body: 'structure', head: 'none', weapon: 'cannon', accessory: 'none', scale: 1 };
+    return { body: 'structure', head: 'none', weapon: 'cannon', accessory: 'none', scale: 1, build: 'normal', trim: 'sash' };
   }
   if (card.isFlying) {
-    return { body: 'winged', head: 'beak', weapon: 'claws', accessory: 'wings', scale: 0.9 };
+    return { body: 'winged', head: 'beak', weapon: 'claws', accessory: 'wings', scale: 0.9, build: 'normal', trim: 'sash' };
   }
   if (card.attackRange >= 3) {
-    return { body: 'humanoid', head: 'hood', weapon: 'bow', accessory: 'none', scale: 0.9 };
+    return { body: 'humanoid', head: 'hood', weapon: 'bow', accessory: 'none', scale: 0.9, build: 'lean', trim: 'sash' };
   }
-  return { body: 'humanoid', head: 'helm', weapon: 'sword', accessory: 'none', scale: 1 };
+  return { body: 'humanoid', head: 'helm', weapon: 'sword', accessory: 'none', scale: 1, build: 'normal', trim: 'sash' };
 }
 
 export function modelFor(card: CardDefinition): ModelSpec {
@@ -145,6 +147,77 @@ interface Rig {
   torsoH: number;
 }
 
+/**
+ * Proportion multipliers per build.
+ *
+ * These are applied as a transform around the whole body, so one set of plan
+ * geometry yields a lanky version, a squat version and a hulking version
+ * without any plan being rewritten. Without this, every card sharing a body
+ * plan was drawn from identical hardcoded numbers — which is how forty-seven
+ * humanoids ended up as one figure in different colours.
+ */
+const BUILDS: Record<BuildKind, { w: number; h: number; head: number }> = {
+  normal: { w: 1, h: 1, head: 1 },
+  lean: { w: 0.78, h: 1.12, head: 0.9 },
+  gaunt: { w: 0.64, h: 1.24, head: 0.78 },
+  stout: { w: 1.22, h: 0.86, head: 1.1 },
+  hulking: { w: 1.34, h: 1.16, head: 1.18 },
+  squat: { w: 1.14, h: 0.7, head: 1.24 },
+  towering: { w: 0.9, h: 1.42, head: 0.84 },
+  tiny: { w: 0.82, h: 0.76, head: 1.22 },
+  broad: { w: 1.45, h: 0.94, head: 0.86 },
+};
+
+/**
+ * Paint the team colour onto a torso box, in the place this model wears it.
+ *
+ * Every figure in the game used to carry the identical horizontal band across
+ * the chest at the identical height. Even genuinely different bodies rhymed
+ * because of it, so where the colour sits is now part of the model.
+ */
+function trimBand(
+  ctx: CanvasRenderingContext2D,
+  kind: TrimKind,
+  p: Palette,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+): void {
+  if (kind === 'none') return;
+  ctx.fillStyle = p.trim;
+  switch (kind) {
+    case 'sash':
+      ctx.fillRect(x, y + h * 0.45, w, Math.max(3, h * 0.18));
+      break;
+    case 'belt':
+      ctx.fillRect(x, y + h * 0.78, w, Math.max(3, h * 0.16));
+      break;
+    case 'collar':
+      ctx.fillRect(x, y, w, Math.max(3, h * 0.2));
+      break;
+    case 'hem':
+      ctx.fillRect(x, y + h - Math.max(3, h * 0.16), w, Math.max(3, h * 0.16));
+      break;
+    case 'shoulders':
+      ctx.fillRect(x, y + h * 0.08, w * 0.28, Math.max(3, h * 0.22));
+      ctx.fillRect(x + w * 0.72, y + h * 0.08, w * 0.28, Math.max(3, h * 0.22));
+      break;
+    case 'chevron': {
+      ctx.beginPath();
+      ctx.moveTo(x + w / 2, y + h * 0.3);
+      ctx.lineTo(x + w, y + h * 0.62);
+      ctx.lineTo(x + w, y + h * 0.8);
+      ctx.lineTo(x + w / 2, y + h * 0.48);
+      ctx.lineTo(x, y + h * 0.8);
+      ctx.lineTo(x, y + h * 0.62);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Body plans — each returns the rig the head/weapon/accessory attach to
 // ---------------------------------------------------------------------------
@@ -156,6 +229,7 @@ function drawBody(
   cx: number,
   groundY: number,
   swing: number,
+  trim: TrimKind = 'sash',
 ): Rig {
   switch (plan) {
     case 'humanoid': {
@@ -167,8 +241,7 @@ function drawBody(
       const top = groundY - 46;
       roundRect(ctx, cx - 15, top, 30, 28, 8, p.body);
       roundRect(ctx, cx - 15, top, 30, 10, 6, p.light);
-      ctx.fillStyle = p.trim;
-      ctx.fillRect(cx - 15, top + 13, 30, 5);
+      trimBand(ctx, trim, p, cx - 15, top, 30, 28);
       roundRect(ctx, cx - 20, top + 4 - swing * 5, 7, 18, 3, shade(p.body, -0.15));
       roundRect(ctx, cx + 13, top + 4 + swing * 5, 7, 18, 3, shade(p.body, -0.15));
       return { headX: cx, headY: top - 12, headR: 12, handX: cx + 18, handY: top + 8, torsoX: cx - 15, torsoY: top, torsoW: 30, torsoH: 28 };
@@ -182,8 +255,7 @@ function drawBody(
       const top = groundY - 54;
       roundRect(ctx, cx - 22, top, 44, 36, 12, p.body);
       roundRect(ctx, cx - 22, top, 44, 12, 8, p.light);
-      ctx.fillStyle = p.trim;
-      ctx.fillRect(cx - 22, top + 18, 44, 6);
+      trimBand(ctx, trim, p, cx - 22, top, 44, 36);
       roundRect(ctx, cx - 32, top + 2 - swing * 4, 11, 30, 5, shade(p.body, -0.15));
       roundRect(ctx, cx + 21, top + 2 + swing * 4, 11, 30, 5, shade(p.body, -0.15));
       return { headX: cx, headY: top - 8, headR: 14, handX: cx + 27, handY: top + 26, torsoX: cx - 22, torsoY: top, torsoW: 44, torsoH: 36 };
@@ -389,6 +461,168 @@ function drawBody(
         }
       }
       return { headX: cx, headY: groundY - 44, headR: 10, handX: cx + 22, handY: groundY - 32, torsoX: cx - 24, torsoY: groundY - 34, torsoW: 48, torsoH: 20 };
+    }
+
+    // --- silhouettes added to break up the humanoid crowd ------------------
+
+    case 'centaur': {
+      // Human torso rising from a four-legged barrel.
+      const legSwing = swing * 5;
+      const backY = groundY - 26;
+      for (let i = 0; i < 4; i++) {
+        const lx = cx - 22 + i * 13;
+        const sw = i % 2 === 0 ? legSwing : -legSwing;
+        roundRect(ctx, lx + sw, backY, 7, 26, 3, p.dark);
+      }
+      roundRect(ctx, cx - 26, backY - 18, 52, 22, 10, p.body);
+      const top = backY - 50;
+      roundRect(ctx, cx + 2, top, 22, 34, 8, shade(p.body, 0.1));
+      trimBand(ctx, trim, p, cx + 2, top, 22, 34);
+      return { headX: cx + 13, headY: top - 11, headR: 11, handX: cx + 28, handY: top + 12, torsoX: cx + 2, torsoY: top, torsoW: 22, torsoH: 34 };
+    }
+
+    case 'floating': {
+      // No legs: a hovering mass over a trailing hem.
+      const drift = swing * 3;
+      const centre = groundY - 40 + drift;
+      ellipse(ctx, cx, groundY - 4, 16, 5, 'rgba(0,0,0,0.25)');
+      ctx.fillStyle = shade(p.body, -0.2);
+      ctx.beginPath();
+      ctx.moveTo(cx - 20, centre);
+      ctx.quadraticCurveTo(cx - 14, groundY - 8, cx, groundY - 2);
+      ctx.quadraticCurveTo(cx + 14, groundY - 8, cx + 20, centre);
+      ctx.closePath();
+      ctx.fill();
+      ellipse(ctx, cx, centre, 21, 19, p.body);
+      ellipse(ctx, cx - 6, centre - 6, 9, 7, p.light);
+      trimBand(ctx, trim, p, cx - 21, centre - 8, 42, 20);
+      return { headX: cx, headY: centre - 22, headR: 11, handX: cx + 22, handY: centre, torsoX: cx - 21, torsoY: centre - 19, torsoW: 42, torsoH: 38 };
+    }
+
+    case 'totem': {
+      // A stack of plates, the tallest thing on the board.
+      let y = groundY;
+      const widths = [30, 26, 22, 19, 16];
+      for (let i = 0; i < widths.length; i++) {
+        const w = widths[i];
+        const h = 13;
+        roundRect(ctx, cx - w / 2, y - h, w, h, 3, i % 2 === 0 ? p.body : shade(p.body, -0.18));
+        y -= h + 1;
+      }
+      trimBand(ctx, trim, p, cx - 15, groundY - 34, 30, 12);
+      return { headX: cx, headY: y - 9, headR: 10, handX: cx + 17, handY: y + 18, torsoX: cx - 13, torsoY: y, torsoW: 26, torsoH: 34 };
+    }
+
+    case 'tripod': {
+      // Three splayed legs under a small pod.
+      const flex = swing * 3;
+      const podY = groundY - 40;
+      for (const dx of [-19, 0, 19]) {
+        ctx.strokeStyle = p.dark;
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.moveTo(cx + dx * 0.25, podY + 8);
+        ctx.lineTo(cx + dx + (dx === 0 ? 0 : flex), groundY);
+        ctx.stroke();
+      }
+      ellipse(ctx, cx, podY, 17, 14, p.body);
+      ellipse(ctx, cx + 5, podY - 4, 6, 5, p.light);
+      trimBand(ctx, trim, p, cx - 17, podY - 4, 34, 9);
+      return { headX: cx, headY: podY - 16, headR: 9, handX: cx + 19, handY: podY + 2, torsoX: cx - 17, torsoY: podY - 14, torsoW: 34, torsoH: 28 };
+    }
+
+    case 'blob': {
+      // Wide, soft, limbless. Squashes as it moves.
+      const squash = 1 + swing * 0.08;
+      const h = 26 / squash;
+      const w = 30 * squash;
+      ellipse(ctx, cx, groundY - h * 0.7, w, h, p.body);
+      ellipse(ctx, cx - w * 0.3, groundY - h, w * 0.36, h * 0.4, p.light);
+      trimBand(ctx, trim, p, cx - w, groundY - h * 0.6, w * 2, 8);
+      return { headX: cx, headY: groundY - h * 1.5, headR: 11, handX: cx + w * 0.8, handY: groundY - h * 0.8, torsoX: cx - w, torsoY: groundY - h * 1.4, torsoW: w * 2, torsoH: h * 1.4 };
+    }
+
+    case 'crystal': {
+      // Angular shards around a hollow core — nothing organic about it.
+      const spin = swing * 2;
+      const top = groundY - 52;
+      ctx.fillStyle = p.body;
+      ctx.beginPath();
+      ctx.moveTo(cx, top);
+      ctx.lineTo(cx + 18, groundY - 26);
+      ctx.lineTo(cx + 10, groundY);
+      ctx.lineTo(cx - 10, groundY);
+      ctx.lineTo(cx - 18, groundY - 26);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = p.light;
+      ctx.beginPath();
+      ctx.moveTo(cx, top);
+      ctx.lineTo(cx + 18, groundY - 26);
+      ctx.lineTo(cx, groundY - 20);
+      ctx.closePath();
+      ctx.fill();
+      ellipse(ctx, cx + spin, groundY - 30, 6, 6, p.trim);
+      return { headX: cx, headY: top - 6, headR: 8, handX: cx + 20, handY: groundY - 32, torsoX: cx - 18, torsoY: top, torsoW: 36, torsoH: 52 };
+    }
+
+    case 'swarm': {
+      // A card that *is* its cloud: five small bodies orbiting, no single torso.
+      const positions: Array<[number, number, number]> = [
+        [0, -44, 10], [-17, -30, 8], [17, -32, 8], [-10, -14, 7], [12, -12, 7],
+      ];
+      for (const [dx, dy, r] of positions) {
+        const wob = swing * (dx === 0 ? 2 : dx > 0 ? 3 : -3);
+        ellipse(ctx, cx + dx + wob, groundY + dy, r, r * 0.9, p.body);
+        ellipse(ctx, cx + dx + wob - r * 0.3, groundY + dy - r * 0.3, r * 0.35, r * 0.3, p.light);
+      }
+      ctx.fillStyle = p.trim;
+      ctx.fillRect(cx - 14, groundY - 26, 28, 4);
+      return { headX: cx, headY: groundY - 44, headR: 10, handX: cx + 22, handY: groundY - 30, torsoX: cx - 18, torsoY: groundY - 46, torsoW: 36, torsoH: 40 };
+    }
+
+    case 'siege': {
+      // Long counterweighted arm on a narrow base.
+      const tilt = swing * 0.12;
+      roundRect(ctx, cx - 14, groundY - 14, 28, 14, 3, p.dark);
+      ctx.save();
+      ctx.translate(cx, groundY - 14);
+      ctx.rotate(-0.5 + tilt);
+      roundRect(ctx, -3, -44, 6, 46, 2, p.wood);
+      ellipse(ctx, 0, -44, 8, 8, shade(p.body, -0.1));
+      ctx.restore();
+      roundRect(ctx, cx - 9, groundY - 30, 18, 18, 4, p.body);
+      trimBand(ctx, trim, p, cx - 9, groundY - 26, 18, 6);
+      return { headX: cx - 2, headY: groundY - 38, headR: 8, handX: cx + 16, handY: groundY - 26, torsoX: cx - 9, torsoY: groundY - 30, torsoW: 18, torsoH: 18 };
+    }
+
+    case 'hunched': {
+      // Bent double — head lower than the shoulders.
+      const legSwing = swing * 5;
+      roundRect(ctx, cx - 12 + legSwing, groundY - 18, 10, 18, 4, p.dark);
+      roundRect(ctx, cx + 2 - legSwing, groundY - 18, 10, 18, 4, p.dark);
+      const top = groundY - 40;
+      ctx.fillStyle = p.body;
+      ctx.beginPath();
+      ctx.ellipse(cx, top + 10, 20, 14, -0.35, 0, Math.PI * 2);
+      ctx.fill();
+      ellipse(ctx, cx - 6, top + 4, 8, 6, p.light);
+      trimBand(ctx, trim, p, cx - 18, top + 12, 36, 6);
+      roundRect(ctx, cx + 8, top + 12 + swing * 4, 7, 22, 3, shade(p.body, -0.15));
+      return { headX: cx - 18, headY: top + 16, headR: 10, handX: cx + 14, handY: top + 28, torsoX: cx - 20, torsoY: top - 4, torsoW: 40, torsoH: 28 };
+    }
+
+    case 'twinned': {
+      // Two torsos on one waist.
+      const legSwing = swing * 5;
+      roundRect(ctx, cx - 11 + legSwing, groundY - 18, 10, 18, 4, p.dark);
+      roundRect(ctx, cx + 1 - legSwing, groundY - 18, 10, 18, 4, p.dark);
+      const top = groundY - 44;
+      roundRect(ctx, cx - 20, top + 6, 40, 20, 7, shade(p.body, -0.1));
+      roundRect(ctx, cx - 19, top - 4, 17, 22, 6, p.body);
+      roundRect(ctx, cx + 2, top + 2, 17, 22, 6, shade(p.body, 0.12));
+      trimBand(ctx, trim, p, cx - 20, top + 12, 40, 5);
+      return { headX: cx - 11, headY: top - 14, headR: 10, handX: cx + 22, handY: top + 12, torsoX: cx - 20, torsoY: top - 4, torsoW: 40, torsoH: 30 };
     }
 
     case 'structure':
@@ -663,16 +897,27 @@ function drawAccessory(
       roundRect(ctx, rig.torsoX - 16, rig.torsoY + 2 - swing * 4, 14, 21, 5, p.trim);
       roundRect(ctx, rig.torsoX - 13, rig.torsoY + 6 - swing * 4, 8, 13, 3, shade(p.trim, 0.35));
       break;
-    case 'cape':
+    case 'cape': {
+      /*
+       * Narrower than the torso and cut short.
+       *
+       * It used to be drawn a little *wider* than the torso and flared well
+       * past its base, which on the broader body plans meant the cape was the
+       * entire silhouette — a row of otherwise unrelated cards all read as the
+       * same blue teardrop with a head on top.
+       */
+      const inset = rig.torsoW * 0.22;
+      const drop = Math.min(14, rig.torsoH * 0.45);
       ctx.fillStyle = shade(p.trim, -0.25);
       ctx.beginPath();
-      ctx.moveTo(rig.torsoX + 2, rig.torsoY + 2);
-      ctx.lineTo(rig.torsoX + rig.torsoW - 2, rig.torsoY + 2);
-      ctx.lineTo(rig.torsoX + rig.torsoW + 4 + swing * 4, rig.torsoY + rig.torsoH + 16);
-      ctx.lineTo(rig.torsoX - 4 + swing * 4, rig.torsoY + rig.torsoH + 16);
+      ctx.moveTo(rig.torsoX + inset, rig.torsoY + 2);
+      ctx.lineTo(rig.torsoX + rig.torsoW - inset, rig.torsoY + 2);
+      ctx.lineTo(rig.torsoX + rig.torsoW - inset * 0.4 + swing * 3, rig.torsoY + rig.torsoH + drop);
+      ctx.lineTo(rig.torsoX + inset * 0.4 + swing * 3, rig.torsoY + rig.torsoH + drop);
       ctx.closePath();
       ctx.fill();
       break;
+    }
     case 'wings':
       // Drawn by the winged body plan itself; nothing extra to add.
       break;
@@ -761,14 +1006,52 @@ function drawFigure(ctx: CanvasRenderingContext2D, pose: PoseParams): void {
   ctx.save();
   ctx.lineJoin = 'round';
 
-  const scale = pose.spec.scale;
+  /*
+   * Model scale and build proportion multiply, so a card already drawn large
+   * (a Giant at 1.45) on a hulking build (another 1.34 wide) rendered at
+   * nearly twice the size the 96px cell was laid out for and was cropped by
+   * its own frame. Clamp the composite.
+   */
+  const buildSpread = BUILDS[pose.spec.build] ?? BUILDS.normal;
+  const worstAxis = Math.max(buildSpread.w, buildSpread.h);
+  const scale = Math.min(pose.spec.scale, 1.5 / worstAxis);
   ctx.translate(cx, groundY);
   ctx.scale(scale, scale);
   ctx.translate(-cx, -groundY);
 
   const isStatic = pose.spec.body === 'structure';
+  const bodyY = groundY - (isStatic ? 0 : bob);
+  const bodyX = cx + lean;
+
+  /*
+   * Proportion is applied as a transform about the figure's feet, so one set
+   * of plan geometry yields a gaunt version, a squat version and a hulking
+   * version. The rig the plan returns is in its own unscaled space, so it has
+   * to be mapped back out before the head, weapon and accessory — which are
+   * drawn after the transform is lifted — can attach to it.
+   */
+  const build = BUILDS[pose.spec.build] ?? BUILDS.normal;
+  ctx.save();
+  ctx.translate(bodyX, bodyY);
+  ctx.scale(build.w, build.h);
+  ctx.translate(-bodyX, -bodyY);
   // Leaning into the blow moves the whole body, not just the arm.
-  const rig = drawBody(ctx, pose.spec.body, palette, cx + lean, groundY - (isStatic ? 0 : bob), swing);
+  const raw = drawBody(ctx, pose.spec.body, palette, bodyX, bodyY, swing, pose.spec.trim);
+  ctx.restore();
+
+  const outX = (x: number): number => bodyX + (x - bodyX) * build.w;
+  const outY = (y: number): number => bodyY + (y - bodyY) * build.h;
+  const rig: Rig = {
+    headX: outX(raw.headX),
+    headY: outY(raw.headY),
+    headR: raw.headR * ((build.w + build.h) / 2) * build.head,
+    handX: outX(raw.handX),
+    handY: outY(raw.handY),
+    torsoX: outX(raw.torsoX),
+    torsoY: outY(raw.torsoY),
+    torsoW: raw.torsoW * build.w,
+    torsoH: raw.torsoH * build.h,
+  };
 
   // Accessories that sit behind the figure go first.
   if (pose.spec.accessory === 'cape' || pose.spec.accessory === 'banner') {

@@ -30,7 +30,28 @@ export type BodyPlan =
   | 'wraith'
   | 'quadruped'
   | 'structure'
-  | 'cart';
+  | 'cart'
+  // --- silhouettes added to break up the humanoid crowd --------------------
+  /** Human torso on a four-legged barrel. Reads as a rider without a mount. */
+  | 'centaur'
+  /** No legs at all: a hovering mass with a trailing hem. */
+  | 'floating'
+  /** Segmented column of stacked plates, taller than anything else. */
+  | 'totem'
+  /** Three splayed legs under a small pod. */
+  | 'tripod'
+  /** A soft, wide, limbless mound. */
+  | 'blob'
+  /** Angular faceted shards with a hollow core. */
+  | 'crystal'
+  /** A ring of small bodies rather than one — a card that *is* its swarm. */
+  | 'swarm'
+  /** Long counterweighted arm on a narrow base. */
+  | 'siege'
+  /** Bipedal but bent double, head below shoulder height. */
+  | 'hunched'
+  /** Twin torsos on one waist. */
+  | 'twinned';
 
 export type HeadKind =
   | 'helm'
@@ -47,6 +68,31 @@ export type HeadKind =
    *  distinguishable at a glance. */
   | 'crown'
   | 'none';
+
+/**
+ * Proportion. The single biggest driver of whether two figures read as the
+ * same character, and the dimension the registry did not have — every card on
+ * a given body plan was drawn from identical hardcoded geometry, so forty-odd
+ * humanoids were one figure in different colours.
+ */
+export type BuildKind =
+  | 'normal'
+  | 'lean'
+  | 'gaunt'
+  | 'stout'
+  | 'hulking'
+  | 'squat'
+  | 'towering'
+  | 'tiny'
+  | 'broad';
+
+/**
+ * Where a unit wears its team colour.
+ *
+ * Every figure in the game carried the same horizontal band across the chest at
+ * the same height, which made even genuinely different bodies rhyme.
+ */
+export type TrimKind = 'sash' | 'belt' | 'shoulders' | 'hem' | 'chevron' | 'collar' | 'none';
 
 export type WeaponKind =
   | 'sword'
@@ -73,6 +119,8 @@ export interface ModelSpec {
   accessory: AccessoryKind;
   /** Overall size multiplier. Big creatures should read as big. */
   scale: number;
+  build: BuildKind;
+  trim: TrimKind;
 }
 
 const model = (
@@ -81,7 +129,9 @@ const model = (
   weapon: WeaponKind,
   accessory: AccessoryKind = 'none',
   scale = 1,
-): ModelSpec => ({ body, head, weapon, accessory, scale });
+  build: BuildKind = 'normal',
+  trim: TrimKind = 'sash',
+): ModelSpec => ({ body, head, weapon, accessory, scale, build, trim });
 
 /**
  * Every model in the game, keyed by the id cards reference.
@@ -91,165 +141,165 @@ const model = (
  */
 export const MODELS: Record<string, ModelSpec> = {
   // --- original roster -----------------------------------------------------
-  knight: model('humanoid', 'helm', 'sword', 'shield', 1.0),
-  archer: model('humanoid', 'hood', 'bow', 'none', 0.88),
-  giant: model('brute', 'none', 'claws', 'none', 1.45),
-  musketeer: model('humanoid', 'crest', 'cannon', 'none', 0.95),
-  minion: model('winged', 'horned', 'claws', 'wings', 0.72),
-  skeleton: model('humanoid', 'skull', 'dagger', 'none', 0.66),
-  goblin: model('humanoid', 'hood', 'dagger', 'none', 0.7),
-  spearGoblin: model('humanoid', 'hood', 'spear', 'none', 0.72),
-  bomber: model('humanoid', 'skull', 'bomb', 'backpack', 0.8),
-  valkyrie: model('humanoid', 'horned', 'axe', 'cape', 1.05),
-  wizard: model('humanoid', 'wizardHat', 'staff', 'cape', 0.95),
-  miniPekka: model('mech', 'visor', 'sword', 'none', 1.0),
-  babyDragon: model('winged', 'crest', 'claws', 'wings', 1.15),
-  hogRider: model('quadruped', 'crest', 'hammer', 'none', 1.1),
-  barbarian: model('humanoid', 'horned', 'axe', 'none', 0.95),
-  goldenKnight: model('humanoid', 'crown', 'sword', 'cape', 1.05),
-  archerQueen: model('humanoid', 'crown', 'bow', 'cape', 1.0),
+  knight: model('humanoid', 'helm', 'sword', 'shield', 1.0, 'broad', 'sash'),
+  archer: model('centaur', 'hood', 'bow', 'none', 0.88, 'gaunt', 'shoulders'),
+  giant: model('centaur', 'none', 'claws', 'none', 1.45, 'hulking', 'chevron'),
+  musketeer: model('humanoid', 'crest', 'cannon', 'none', 0.95, 'normal', 'shoulders'),
+  minion: model('insect', 'horned', 'claws', 'wings', 0.72, 'tiny', 'belt'),
+  skeleton: model('totem', 'skull', 'dagger', 'none', 0.66, 'tiny', 'sash'),
+  goblin: model('centaur', 'hood', 'dagger', 'none', 0.7, 'tiny', 'chevron'),
+  spearGoblin: model('cart', 'hood', 'spear', 'none', 0.72, 'tiny', 'hem'),
+  bomber: model('totem', 'skull', 'bomb', 'backpack', 0.8, 'gaunt', 'sash'),
+  valkyrie: model('hunched', 'horned', 'axe', 'cape', 1.05, 'normal', 'chevron'),
+  wizard: model('centaur', 'wizardHat', 'staff', 'cape', 0.95, 'normal', 'shoulders'),
+  miniPekka: model('shelled', 'visor', 'sword', 'none', 1.0, 'normal', 'shoulders'),
+  babyDragon: model('swarm', 'crest', 'claws', 'wings', 1.15, 'normal', 'shoulders'),
+  hogRider: model('floating', 'crest', 'hammer', 'none', 1.1, 'squat', 'collar'),
+  barbarian: model('brute', 'horned', 'axe', 'none', 0.95, 'tiny', 'collar'),
+  goldenKnight: model('twinned', 'crown', 'sword', 'cape', 1.05, 'broad', 'collar'),
+  archerQueen: model('hunched', 'crown', 'bow', 'cape', 1.0, 'towering', 'chevron'),
 
   // --- structures ----------------------------------------------------------
-  cannonTower: model('structure', 'none', 'cannon', 'none', 1.0),
-  teslaCoil: model('structure', 'none', 'staff', 'none', 1.0),
-  towerPrincess: model('structure', 'crown', 'bow', 'banner', 1.0),
-  towerCannoneer: model('structure', 'visor', 'cannon', 'none', 1.0),
-  towerDuchess: model('structure', 'crest', 'dagger', 'banner', 1.0),
-  kingKeep: model('structure', 'crown', 'cannon', 'banner', 1.2),
+  cannonTower: model('totem', 'none', 'cannon', 'none', 1.0, 'broad', 'belt'),
+  teslaCoil: model('tripod', 'none', 'staff', 'none', 1.0, 'lean', 'collar'),
+  towerPrincess: model('siege', 'crown', 'bow', 'banner', 1.0, 'broad', 'collar'),
+  towerCannoneer: model('crystal', 'visor', 'cannon', 'none', 1.0, 'broad', 'hem'),
+  towerDuchess: model('tripod', 'crest', 'dagger', 'banner', 1.0, 'tiny', 'collar'),
+  kingKeep: model('blob', 'crown', 'cannon', 'banner', 1.2, 'tiny', 'hem'),
 
   // --- first unique wave ---------------------------------------------------
-  crystalGolem: model('golem', 'none', 'claws', 'none', 1.2),
-  ronin: model('humanoid', 'mask', 'sword', 'cape', 1.0),
-  bulwark: model('humanoid', 'visor', 'hammer', 'shield', 1.05),
-  ironhide: model('brute', 'horned', 'hammer', 'none', 1.3),
-  arcWarden: model('orb', 'none', 'staff', 'halo', 0.95),
-  siegeDrill: model('cart', 'visor', 'drill', 'none', 1.15),
-  galeMonk: model('humanoid', 'none', 'staff', 'cape', 0.95),
-  breacher: model('mech', 'visor', 'drill', 'backpack', 1.05),
-  lanternBearer: model('humanoid', 'hood', 'lantern', 'halo', 0.9),
-  frostWisp: model('orb', 'none', 'none', 'halo', 0.75),
-  hiveTitan: model('brute', 'none', 'claws', 'backpack', 1.35),
-  plagueBearer: model('humanoid', 'mask', 'scythe', 'none', 0.9),
-  berserker: model('humanoid', 'none', 'axe', 'none', 0.85),
+  crystalGolem: model('serpent', 'none', 'claws', 'none', 1.2, 'lean', 'hem'),
+  ronin: model('wraith', 'mask', 'sword', 'cape', 1.0, 'towering', 'belt'),
+  bulwark: model('wraith', 'visor', 'hammer', 'shield', 1.05, 'hulking', 'belt'),
+  ironhide: model('tripod', 'horned', 'hammer', 'none', 1.3, 'lean', 'hem'),
+  arcWarden: model('golem', 'none', 'staff', 'halo', 0.95, 'tiny', 'chevron'),
+  siegeDrill: model('swarm', 'visor', 'drill', 'none', 1.15, 'normal', 'collar'),
+  galeMonk: model('twinned', 'none', 'staff', 'cape', 0.95, 'tiny', 'belt'),
+  breacher: model('blob', 'visor', 'drill', 'backpack', 1.05, 'tiny', 'collar'),
+  lanternBearer: model('golem', 'hood', 'lantern', 'halo', 0.9, 'squat', 'shoulders'),
+  frostWisp: model('swarm', 'none', 'none', 'halo', 0.75, 'broad', 'shoulders'),
+  hiveTitan: model('tripod', 'none', 'claws', 'backpack', 1.35, 'squat', 'collar'),
+  plagueBearer: model('centaur', 'mask', 'scythe', 'none', 0.9, 'hulking', 'shoulders'),
+  berserker: model('centaur', 'none', 'axe', 'none', 0.85, 'gaunt', 'shoulders'),
 
   // --- second unique wave --------------------------------------------------
-  skyTalon: model('winged', 'beak', 'dagger', 'wings', 0.95),
-  sandBurrower: model('insect', 'none', 'claws', 'none', 0.95),
-  mirrorShade: model('wraith', 'mask', 'dagger', 'cape', 0.95),
-  boundKeeper: model('humanoid', 'helm', 'staff', 'halo', 0.95),
-  sapling: model('quadruped', 'crest', 'claws', 'none', 0.9),
-  powderCart: model('cart', 'none', 'bomb', 'none', 0.9),
-  bastionTurtle: model('shelled', 'none', 'claws', 'none', 1.2),
-  warBanner: model('humanoid', 'helm', 'spear', 'banner', 1.0),
-  voidStalker: model('wraith', 'skull', 'claws', 'none', 1.0),
-  flakNest: model('structure', 'visor', 'cannon', 'backpack', 1.0),
-  broodMother: model('insect', 'horned', 'claws', 'backpack', 1.1),
-  longshot: model('humanoid', 'visor', 'bow', 'backpack', 0.95),
-  aegisBreaker: model('mech', 'horned', 'hammer', 'none', 1.1),
-  marshWalker: model('serpent', 'crest', 'spear', 'none', 1.0),
-  packAlpha: model('quadruped', 'horned', 'claws', 'none', 1.05),
+  skyTalon: model('swarm', 'beak', 'dagger', 'wings', 0.95, 'tiny', 'shoulders'),
+  sandBurrower: model('blob', 'none', 'claws', 'none', 0.95, 'lean', 'collar'),
+  mirrorShade: model('blob', 'mask', 'dagger', 'cape', 0.95, 'stout', 'belt'),
+  boundKeeper: model('twinned', 'helm', 'staff', 'halo', 0.95, 'gaunt', 'belt'),
+  sapling: model('serpent', 'crest', 'claws', 'none', 0.9, 'towering', 'belt'),
+  powderCart: model('siege', 'none', 'bomb', 'none', 0.9, 'normal', 'chevron'),
+  bastionTurtle: model('brute', 'none', 'claws', 'none', 1.2, 'stout', 'collar'),
+  warBanner: model('serpent', 'helm', 'spear', 'banner', 1.0, 'lean', 'collar'),
+  voidStalker: model('orb', 'skull', 'claws', 'none', 1.0, 'gaunt', 'hem'),
+  flakNest: model('crystal', 'visor', 'cannon', 'backpack', 1.0, 'lean', 'belt'),
+  broodMother: model('totem', 'horned', 'claws', 'backpack', 1.1, 'stout', 'shoulders'),
+  longshot: model('blob', 'visor', 'bow', 'backpack', 0.95, 'gaunt', 'belt'),
+  aegisBreaker: model('quadruped', 'horned', 'hammer', 'none', 1.1, 'towering', 'sash'),
+  marshWalker: model('golem', 'crest', 'spear', 'none', 1.0, 'hulking', 'sash'),
+  packAlpha: model('crystal', 'horned', 'claws', 'none', 1.05, 'gaunt', 'sash'),
 
   // --- third unique wave ---------------------------------------------------
-  cinderImp: model('humanoid', 'horned', 'dagger', 'none', 0.6),
-  dartAcolyte: model('humanoid', 'mask', 'spear', 'none', 0.82),
-  obsidianColossus: model('golem', 'horned', 'hammer', 'cape', 1.5),
-  stormDrake: model('winged', 'horned', 'bomb', 'wings', 1.25),
-  tideCaller: model('wraith', 'crest', 'staff', 'halo', 1.0),
-  frostPylon: model('structure', 'crest', 'staff', 'none', 0.95),
-  thornWarden: model('insect', 'crest', 'spear', 'none', 0.8),
-  stoneWarden: model('golem', 'helm', 'hammer', 'shield', 1.15),
+  cinderImp: model('totem', 'horned', 'dagger', 'none', 0.6, 'gaunt', 'sash'),
+  dartAcolyte: model('swarm', 'mask', 'spear', 'none', 0.82, 'gaunt', 'collar'),
+  obsidianColossus: model('cart', 'horned', 'hammer', 'cape', 1.5, 'broad', 'belt'),
+  stormDrake: model('insect', 'horned', 'bomb', 'wings', 1.25, 'towering', 'collar'),
+  tideCaller: model('siege', 'crest', 'staff', 'halo', 1.0, 'hulking', 'shoulders'),
+  frostPylon: model('totem', 'crest', 'staff', 'none', 0.95, 'hulking', 'hem'),
+  thornWarden: model('tripod', 'crest', 'spear', 'none', 0.8, 'tiny', 'belt'),
+  stoneWarden: model('wraith', 'helm', 'hammer', 'shield', 1.15, 'broad', 'collar'),
 
   // --- shielded and charging archetypes ------------------------------------
-  spearGuard: model('humanoid', 'skull', 'spear', 'shield', 0.78),
-  ironCharger: model('quadruped', 'visor', 'axe', 'shield', 1.2),
+  spearGuard: model('blob', 'skull', 'spear', 'shield', 0.78, 'tiny', 'collar'),
+  ironCharger: model('serpent', 'visor', 'axe', 'shield', 1.2, 'gaunt', 'belt'),
   // Small and plated: the visor and shield read as the armour a single hit
   // strips, and the claws as the bite that keeps getting worse.
-  eliteHound: model('quadruped', 'visor', 'claws', 'shield', 0.68),
+  eliteHound: model('centaur', 'visor', 'claws', 'shield', 0.68, 'tiny', 'sash'),
 
   // --- role wave: near-variants and new archetypes --------------------------
-  sewerRat: model('quadruped', 'none', 'dagger', 'none', 0.5),
-  pikeSentry: model('humanoid', 'helm', 'spear', 'cape', 0.9),
-  hedgeKnight: model('humanoid', 'crown', 'axe', 'cape', 0.95),
-  kiteRunner: model('humanoid', 'beak', 'bow', 'cape', 0.8),
-  warhornHerald: model('humanoid', 'crest', 'lantern', 'banner', 0.9),
-  bellTower: model('structure', 'crown', 'none', 'banner', 1.0),
-  skySkiff: model('cart', 'hood', 'bomb', 'wings', 1.0),
-  ramRunner: model('brute', 'horned', 'hammer', 'backpack', 1.15),
-  sapper: model('humanoid', 'mask', 'bomb', 'backpack', 0.72),
-  culverin: model('mech', 'none', 'cannon', 'backpack', 1.05),
-  thornmail: model('golem', 'visor', 'sword', 'shield', 1.1),
-  headsman: model('brute', 'hood', 'scythe', 'none', 1.05),
-  duelist: model('humanoid', 'mask', 'dagger', 'banner', 0.9),
+  sewerRat: model('crystal', 'none', 'dagger', 'none', 0.5, 'tiny', 'sash'),
+  pikeSentry: model('orb', 'helm', 'spear', 'cape', 0.9, 'normal', 'belt'),
+  hedgeKnight: model('serpent', 'crown', 'axe', 'cape', 0.95, 'normal', 'belt'),
+  kiteRunner: model('quadruped', 'beak', 'bow', 'cape', 0.8, 'gaunt', 'sash'),
+  warhornHerald: model('totem', 'crest', 'lantern', 'banner', 0.9, 'stout', 'shoulders'),
+  bellTower: model('crystal', 'crown', 'none', 'banner', 1.0, 'stout', 'collar'),
+  skySkiff: model('insect', 'hood', 'bomb', 'wings', 1.0, 'lean', 'belt'),
+  ramRunner: model('cart', 'horned', 'hammer', 'backpack', 1.15, 'normal', 'hem'),
+  sapper: model('blob', 'mask', 'bomb', 'backpack', 0.72, 'gaunt', 'chevron'),
+  culverin: model('wraith', 'none', 'cannon', 'backpack', 1.05, 'gaunt', 'belt'),
+  thornmail: model('orb', 'visor', 'sword', 'shield', 1.1, 'hulking', 'hem'),
+  headsman: model('humanoid', 'hood', 'scythe', 'none', 1.05, 'lean', 'shoulders'),
+  duelist: model('brute', 'mask', 'dagger', 'banner', 0.9, 'stout', 'collar'),
 
   // --- depth wave: support, structures, tanks, champions --------------------
-  shieldChaplain: model('humanoid', 'hood', 'staff', 'shield', 0.95),
-  wardstone: model('structure', 'none', 'lantern', 'halo', 0.95),
-  barbedFence: model('structure', 'none', 'spear', 'shield', 0.9),
-  rampartOx: model('brute', 'crest', 'hammer', 'shield', 1.35),
-  graveTitan: model('golem', 'skull', 'scythe', 'cape', 1.4),
-  halberdier: model('humanoid', 'visor', 'spear', 'banner', 1.0),
-  tunnelRat: model('insect', 'visor', 'drill', 'none', 0.62),
-  wardenMatriarch: model('humanoid', 'crown', 'hammer', 'halo', 1.05),
-  rookmaster: model('humanoid', 'crown', 'scythe', 'backpack', 1.0),
+  shieldChaplain: model('siege', 'hood', 'staff', 'shield', 0.95, 'lean', 'sash'),
+  wardstone: model('crystal', 'none', 'lantern', 'halo', 0.95, 'broad', 'shoulders'),
+  barbedFence: model('structure', 'none', 'spear', 'shield', 0.9, 'squat', 'sash'),
+  rampartOx: model('cart', 'crest', 'hammer', 'shield', 1.35, 'broad', 'collar'),
+  graveTitan: model('humanoid', 'skull', 'scythe', 'cape', 1.4, 'broad', 'sash'),
+  halberdier: model('tripod', 'visor', 'spear', 'banner', 1.0, 'tiny', 'collar'),
+  tunnelRat: model('tripod', 'visor', 'drill', 'none', 0.62, 'tiny', 'chevron'),
+  wardenMatriarch: model('floating', 'crown', 'hammer', 'halo', 1.05, 'broad', 'hem'),
+  rookmaster: model('siege', 'crown', 'scythe', 'backpack', 1.0, 'squat', 'shoulders'),
 
   // --- arsenal wave: tower troops, siege and shot variety ------------------
-  towerBombardier: model('structure', 'hood', 'bomb', 'backpack', 1.0),
-  towerFrostwarden: model('structure', 'wizardHat', 'staff', 'cape', 1.0),
-  towerPikeGuard: model('structure', 'helm', 'spear', 'shield', 1.0),
-  glasscaster: model('humanoid', 'wizardHat', 'lantern', 'none', 0.9),
-  scattergun: model('mech', 'hood', 'cannon', 'none', 0.95),
-  hexWarden: model('wraith', 'wizardHat', 'staff', 'banner', 0.98),
-  ironbark: model('golem', 'crest', 'claws', 'backpack', 1.3),
-  siegeMantis: model('insect', 'visor', 'drill', 'wings', 1.1),
-  mortarPit: model('structure', 'skull', 'bomb', 'none', 1.05),
-  beaconSpire: model('structure', 'crown', 'lantern', 'halo', 1.0),
-  standardBearer: model('brute', 'helm', 'spear', 'banner', 1.15),
-  seraphOfDusk: model('winged', 'crown', 'bow', 'halo', 1.05),
+  towerBombardier: model('structure', 'hood', 'bomb', 'backpack', 1.0, 'gaunt', 'belt'),
+  towerFrostwarden: model('siege', 'wizardHat', 'staff', 'cape', 1.0, 'towering', 'collar'),
+  towerPikeGuard: model('structure', 'helm', 'spear', 'shield', 1.0, 'broad', 'shoulders'),
+  glasscaster: model('crystal', 'wizardHat', 'lantern', 'none', 0.9, 'gaunt', 'hem'),
+  scattergun: model('orb', 'hood', 'cannon', 'none', 0.95, 'hulking', 'hem'),
+  hexWarden: model('floating', 'wizardHat', 'staff', 'banner', 0.98, 'tiny', 'belt'),
+  ironbark: model('cart', 'crest', 'claws', 'backpack', 1.3, 'broad', 'hem'),
+  siegeMantis: model('winged', 'visor', 'drill', 'wings', 1.1, 'normal', 'chevron'),
+  mortarPit: model('structure', 'skull', 'bomb', 'none', 1.05, 'stout', 'collar'),
+  beaconSpire: model('structure', 'crown', 'lantern', 'halo', 1.0, 'broad', 'sash'),
+  standardBearer: model('swarm', 'helm', 'spear', 'banner', 1.15, 'broad', 'belt'),
+  seraphOfDusk: model('winged', 'crown', 'bow', 'halo', 1.05, 'towering', 'shoulders'),
 
   // --- spectacle wave: cards built around what they look like --------------
-  stormcaller: model('humanoid', 'wizardHat', 'staff', 'halo', 0.95),
-  delver: model('humanoid', 'helm', 'drill', 'none', 0.85),
-  arcLance: model('humanoid', 'visor', 'staff', 'shield', 0.95),
-  emberJack: model('humanoid', 'crest', 'bomb', 'cape', 0.85),
-  skyLantern: model('orb', 'skull', 'bomb', 'wings', 1.1),
-  pyreDrake: model('winged', 'visor', 'staff', 'halo', 1.0),
-  gloomArcher: model('humanoid', 'skull', 'bow', 'cape', 0.92),
-  boltPair: model('mech', 'crest', 'staff', 'backpack', 0.75),
+  stormcaller: model('twinned', 'wizardHat', 'staff', 'halo', 0.95, 'normal', 'collar'),
+  delver: model('floating', 'helm', 'drill', 'none', 0.85, 'hulking', 'hem'),
+  arcLance: model('shelled', 'visor', 'staff', 'shield', 0.95, 'normal', 'sash'),
+  emberJack: model('floating', 'crest', 'bomb', 'cape', 0.85, 'normal', 'belt'),
+  skyLantern: model('swarm', 'skull', 'bomb', 'wings', 1.1, 'gaunt', 'shoulders'),
+  pyreDrake: model('winged', 'visor', 'staff', 'halo', 1.0, 'towering', 'chevron'),
+  gloomArcher: model('siege', 'skull', 'bow', 'cape', 0.92, 'normal', 'shoulders'),
+  boltPair: model('shelled', 'crest', 'staff', 'backpack', 0.75, 'normal', 'chevron'),
 
   // --- the menagerie wave ---------------------------------------------------
   // Thirty figures for thirty mechanics. Each is a distinct
   // body|head|weapon|accessory tuple, which `tests/models.test.ts` enforces, so
   // no two cards in the game can ever be mistaken for each other on the board.
-  blightFang: model('serpent', 'horned', 'claws', 'none', 0.95),
-  miasmaAdept: model('humanoid', 'mask', 'staff', 'cape', 0.9),
-  concussor: model('brute', 'visor', 'hammer', 'shield', 1.15),
-  powderMule: model('quadruped', 'none', 'bomb', 'backpack', 0.95),
-  doomseed: model('insect', 'none', 'bomb', 'halo', 1.0),
-  railLance: model('mech', 'visor', 'cannon', 'backpack', 1.05),
-  harpoonTurret: model('structure', 'visor', 'spear', 'none', 1.1),
-  cleaver: model('brute', 'mask', 'axe', 'none', 1.05),
-  gustPriest: model('humanoid', 'wizardHat', 'staff', 'wings', 0.92),
-  bloodwing: model('winged', 'beak', 'claws', 'cape', 0.78),
-  sanguineKnight: model('humanoid', 'visor', 'scythe', 'cape', 1.05),
-  spotter: model('humanoid', 'hood', 'bow', 'backpack', 0.8),
-  nightblade: model('wraith', 'visor', 'dagger', 'cape', 0.85),
-  undyingSentinel: model('golem', 'crown', 'sword', 'halo', 1.15),
-  boneReaper: model('wraith', 'skull', 'scythe', 'banner', 1.05),
-  boulderRoller: model('golem', 'none', 'hammer', 'backpack', 1.2),
-  runeBearer: model('humanoid', 'crest', 'staff', 'shield', 0.95),
-  rustbeak: model('winged', 'beak', 'drill', 'none', 0.85),
-  chainbinder: model('humanoid', 'horned', 'claws', 'banner', 0.95),
-  aegisMatron: model('humanoid', 'crown', 'staff', 'shield', 1.0),
-  twinbow: model('humanoid', 'visor', 'bow', 'wings', 0.9),
-  aetherLeech: model('orb', 'mask', 'staff', 'halo', 0.8),
-  skyPiercer: model('mech', 'crest', 'spear', 'wings', 0.95),
-  cloudLancer: model('winged', 'helm', 'spear', 'cape', 0.85),
-  warmason: model('structure', 'crest', 'hammer', 'banner', 1.15),
-  titanshell: model('shelled', 'horned', 'claws', 'shield', 1.4),
-  dreadSerpent: model('serpent', 'crown', 'claws', 'wings', 1.35),
-  emberwing: model('winged', 'crest', 'bomb', 'wings', 0.9),
-  glassSentinel: model('orb', 'visor', 'dagger', 'none', 0.75),
-  thornCaller: model('insect', 'crest', 'spear', 'backpack', 0.88),
+  blightFang: model('cart', 'horned', 'claws', 'none', 0.95, 'gaunt', 'hem'),
+  miasmaAdept: model('floating', 'mask', 'staff', 'cape', 0.9, 'normal', 'belt'),
+  concussor: model('hunched', 'visor', 'hammer', 'shield', 1.15, 'stout', 'chevron'),
+  powderMule: model('floating', 'none', 'bomb', 'backpack', 0.95, 'gaunt', 'belt'),
+  doomseed: model('floating', 'none', 'bomb', 'halo', 1.0, 'squat', 'belt'),
+  railLance: model('quadruped', 'visor', 'cannon', 'backpack', 1.05, 'gaunt', 'chevron'),
+  harpoonTurret: model('structure', 'visor', 'spear', 'none', 1.1, 'stout', 'shoulders'),
+  cleaver: model('brute', 'mask', 'axe', 'none', 1.05, 'normal', 'hem'),
+  gustPriest: model('brute', 'wizardHat', 'staff', 'wings', 0.92, 'tiny', 'hem'),
+  bloodwing: model('winged', 'beak', 'claws', 'cape', 0.78, 'tiny', 'sash'),
+  sanguineKnight: model('mech', 'visor', 'scythe', 'cape', 1.05, 'stout', 'shoulders'),
+  spotter: model('mech', 'hood', 'bow', 'backpack', 0.8, 'lean', 'sash'),
+  nightblade: model('twinned', 'visor', 'dagger', 'cape', 0.85, 'squat', 'belt'),
+  undyingSentinel: model('hunched', 'crown', 'sword', 'halo', 1.15, 'stout', 'collar'),
+  boneReaper: model('humanoid', 'skull', 'scythe', 'banner', 1.05, 'broad', 'chevron'),
+  boulderRoller: model('humanoid', 'none', 'hammer', 'backpack', 1.2, 'squat', 'sash'),
+  runeBearer: model('humanoid', 'crest', 'staff', 'shield', 0.95, 'hulking', 'sash'),
+  rustbeak: model('swarm', 'beak', 'drill', 'none', 0.85, 'squat', 'chevron'),
+  chainbinder: model('hunched', 'horned', 'claws', 'banner', 0.95, 'gaunt', 'sash'),
+  aegisMatron: model('twinned', 'crown', 'staff', 'shield', 1.0, 'tiny', 'hem'),
+  twinbow: model('brute', 'visor', 'bow', 'wings', 0.9, 'stout', 'hem'),
+  aetherLeech: model('floating', 'mask', 'staff', 'halo', 0.8, 'gaunt', 'belt'),
+  skyPiercer: model('brute', 'crest', 'spear', 'wings', 0.95, 'broad', 'chevron'),
+  cloudLancer: model('swarm', 'helm', 'spear', 'cape', 0.85, 'stout', 'collar'),
+  warmason: model('siege', 'crest', 'hammer', 'banner', 1.15, 'squat', 'collar'),
+  titanshell: model('golem', 'horned', 'claws', 'shield', 1.4, 'hulking', 'collar'),
+  dreadSerpent: model('hunched', 'crown', 'claws', 'wings', 1.35, 'broad', 'shoulders'),
+  emberwing: model('insect', 'crest', 'bomb', 'wings', 0.9, 'gaunt', 'collar'),
+  glassSentinel: model('golem', 'visor', 'dagger', 'none', 0.75, 'gaunt', 'collar'),
+  thornCaller: model('twinned', 'crest', 'spear', 'backpack', 0.88, 'normal', 'collar'),
 };
 
 export function modelSpec(modelId: string, fallback: ModelSpec): ModelSpec {

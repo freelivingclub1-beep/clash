@@ -28,7 +28,7 @@ vi.mock('@render/sprites', async () => {
   return {
     spriteFor: () => ({ source: {} as CanvasImageSource, width: 64, height: 96 }),
     modelFor: (card: { modelId: string }) =>
-      models.modelSpec(card.modelId, { body: 'humanoid', head: 'none', weapon: 'none', accessory: 'none', scale: 1 }),
+      models.modelSpec(card.modelId, { body: 'humanoid', head: 'none', weapon: 'none', accessory: 'none', scale: 1, build: 'normal', trim: 'sash' }),
   };
 });
 vi.mock('@render/textures', () => ({

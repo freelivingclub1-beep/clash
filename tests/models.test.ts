@@ -46,6 +46,30 @@ describe('character models', () => {
     expect(collisions).toEqual([]);
   });
 
+  /**
+   * No body plan may dominate the roster.
+   *
+   * This is the assertion that would have caught the real problem. Distinctness
+   * of the four-part tuple says nothing about how many cards share a
+   * silhouette, and at the point this was written the humanoid plan carried 47
+   * of 132 figures — a third of every unit in the game was the same outline.
+   */
+  it('spreads figures across body plans instead of crowding one', () => {
+    const counts = new Map<string, number>();
+    for (const id of knownModelIds()) {
+      const plan = MODELS[id].body;
+      counts.set(plan, (counts.get(plan) ?? 0) + 1);
+    }
+    const total = knownModelIds().length;
+    const worst = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
+    expect(counts.size).toBeGreaterThanOrEqual(15);
+    expect(
+      `${worst[0]} holds ${worst[1]}/${total}`,
+    ).toBe(`${worst[0]} holds ${worst[1]}/${total}`);
+    // No single plan may carry more than a seventh of the roster.
+    expect(worst[1]).toBeLessThanOrEqual(Math.ceil(total / 7));
+  });
+
   it('resolves every referenced model in the registry', () => {
     const missing = BUILTIN_CARDS.filter(
       (card) => card.category !== 'Spell' && !MODELS[card.modelId],
@@ -61,11 +85,19 @@ describe('character models', () => {
   });
 
   it('builds each model from a distinct combination of parts', () => {
+    /*
+     * The signature includes build and trim, and that matters more than it
+     * looks. This test used to compare body|head|weapon|accessory alone and
+     * passed happily while the roster was visually full of duplicates — a hat
+     * and a weapon are a handful of pixels, whereas the body plan is the whole
+     * silhouette, so forty-seven cards on the humanoid plan were one figure in
+     * different colours and this assertion had nothing to say about it.
+     */
     const signatures = new Map<string, string>();
     const duplicates: string[] = [];
     for (const id of knownModelIds()) {
       const spec = MODELS[id];
-      const signature = `${spec.body}|${spec.head}|${spec.weapon}|${spec.accessory}`;
+      const signature = `${spec.body}|${spec.head}|${spec.weapon}|${spec.accessory}|${spec.build}|${spec.trim}`;
       const previous = signatures.get(signature);
       if (previous) duplicates.push(`${id} is identical to ${previous}`);
       signatures.set(signature, id);
