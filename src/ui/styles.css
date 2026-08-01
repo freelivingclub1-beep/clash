@@ -326,6 +326,11 @@ body {
 
 .drag-portrait {
   position: fixed;
+  /* Moved with a transform by its owner rather than by left/top through React,
+     so dragging stays on the compositor instead of re-laying-out every move. */
+  left: 0;
+  top: 0;
+  will-change: transform;
   width: 68px;
   height: 68px;
   margin: -80px 0 0 -34px;
@@ -429,8 +434,15 @@ body {
   overflow: hidden;
 }
 
+/*
+ * Fill is derived in CSS from a single `--aether` custom property written on an
+ * ancestor once a frame, and the cell's own static `--i` index. Keeping the
+ * arithmetic here is what lets the bar animate at the full frame rate without
+ * React re-rendering the battle tree thirty times a second to move it.
+ */
 .aether-fill {
   height: 100%;
+  width: calc(clamp(0, calc(var(--aether, 0) - var(--i)), 1) * 100%);
   background: linear-gradient(180deg, #f06be0, #c22bb8);
 }
 

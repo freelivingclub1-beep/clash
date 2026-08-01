@@ -22,7 +22,7 @@ import { TOWER_LAYOUTS } from '@sim/nav/grid';
 import type { MatchSummary } from '@game/profile/repository';
 import { clientToTile } from '@render/camera';
 import { canDeployAt } from '@sim/nav/grid';
-import { AP_PER_AETHER } from '@sim/constants';
+import { AP_PER_AETHER, TICK_HZ } from '@sim/constants';
 import { aetherMultiplierAtTick } from '@sim/systems/clock';
 import { heroCardIn } from '@game/deck';
 import type { MatchConfig } from '@sim/state';
@@ -66,13 +66,25 @@ export function Battle({ config, localTeam, opponentName, onExit }: BattleProps)
   const rendererRef = useRef<BattleRenderer | null>(null);
   const dragRef = useRef<{ handIndex: number } | null>(null);
 
+  /*
+   * Elements the render loop writes to directly, once a frame, without going
+   * through React. These carry the values that change continuously — aether,
+   * and the dragged card's position — which are exactly the values that make
+   * React re-rendering per frame so expensive.
+   */
+  const liveRef = useRef<HTMLDivElement>(null);
+  const aetherValueRef = useRef<HTMLSpanElement>(null);
+  const dragPortraitRef = useRef<HTMLDivElement>(null);
+
   const [hud, setHud] = useState<HudSnapshot>(EMPTY_HUD);
   const [dragging, setDragging] = useState<number | null>(null);
-  // Pointer position for the drag portrait. Held in state rather than on a
-  // ref because it is what the portrait renders from, and it changes every
-  // pointermove — the arena ghost is updated imperatively on the canvas.
-  const [dragPoint, setDragPoint] = useState<{ x: number; y: number } | null>(null);
   const [countdown, setCountdown] = useState(3);
+
+  /** Move the drag portrait without re-rendering anything. */
+  const moveDragPortrait = useCallback((x: number, y: number) => {
+    const el = dragPortraitRef.current;
+    if (el) el.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+  }, []);
 
   // The runner outlives renders; building it once keeps the match from being
   // silently restarted by an unrelated re-render.
@@ -104,8 +116,44 @@ export function Battle({ config, localTeam, opponentName, onExit }: BattleProps)
 
     const lastRef = { value: '' };
     const renderer = new BattleRenderer(canvas, runner, localTeam, (snapshot) => {
-      // Only push into React when something the HUD shows actually changed.
-      const key = `${snapshot.aether}|${snapshot.crownsBlue}|${snapshot.crownsRed}|${snapshot.phase}|${snapshot.outcome}|${snapshot.abilityCooldownSeconds}|${snapshot.heroOnField}|${Math.floor(snapshot.tick / 15)}`;
+      /*
+       * Continuous values go straight to the DOM, never through React.
+       *
+       * Aether rises every tick, so including it in the change key below meant
+       * the key changed 30 times a second and the whole battle tree — timer,
+       * crowns, ability button, four card tiles and their portraits —
+       * reconciled at that rate. The `tick / 15` term that was meant to
+       * throttle this was completely masked by it.
+       */
+      const aether = snapshot.aether / AP_PER_AETHER;
+      liveRef.current?.style.setProperty('--aether', aether.toFixed(3));
+      const valueEl = aetherValueRef.current;
+      if (valueEl) {
+        const text = aether.toFixed(1);
+        // textContent writes are cheap, but a no-op write still invalidates.
+        if (valueEl.textContent !== text) valueEl.textContent = text;
+      }
+
+      /*
+       * React only hears about things that change the *shape* of the HUD.
+       *
+       * Affordability is what the raw aether number was really standing in for
+       * — it is the only reason a card tile cares about aether at all — and it
+       * changes a handful of times a match rather than thirty times a second.
+       */
+      const local = runner.state.players[localTeam];
+      let affordMask = 0;
+      for (let i = 0; i < local.hand.length; i++) {
+        const card = tryGetCard(local.hand[i]);
+        if (card && snapshot.aether >= card.aetherCost * AP_PER_AETHER) affordMask |= 1 << i;
+      }
+
+      const key =
+        `${affordMask}|${local.hand.join(',')}|${local.queue[0] ?? ''}` +
+        `|${snapshot.crownsBlue}|${snapshot.crownsRed}|${snapshot.phase}|${snapshot.outcome}` +
+        `|${snapshot.abilityCooldownSeconds}|${snapshot.heroOnField}|${snapshot.aetherTrade}` +
+        // The clock only ever renders whole seconds.
+        `|${Math.floor(snapshot.tick / TICK_HZ)}`;
       if (key === lastRef.value) return;
       lastRef.value = key;
       setHud(snapshot);
@@ -241,7 +289,7 @@ export function Battle({ config, localTeam, opponentName, onExit }: BattleProps)
 
       dragRef.current = { handIndex };
       setDragging(handIndex);
-      setDragPoint({ x: event.clientX, y: event.clientY });
+      moveDragPortrait(event.clientX, event.clientY);
       updateGhost(handIndex, event.clientX, event.clientY);
 
       let settled = false;
@@ -259,14 +307,14 @@ export function Battle({ config, localTeam, opponentName, onExit }: BattleProps)
         }
         dragRef.current = null;
         setDragging(null);
-        setDragPoint(null);
         rendererRef.current?.setDrag(null);
       };
 
       function onMove(moveEvent: PointerEvent) {
         if (!dragRef.current) return;
         moveEvent.preventDefault();
-        setDragPoint({ x: moveEvent.clientX, y: moveEvent.clientY });
+        // Imperative: pointermove fires up to 120Hz on a touchscreen.
+        moveDragPortrait(moveEvent.clientX, moveEvent.clientY);
         updateGhost(dragRef.current.handIndex, moveEvent.clientX, moveEvent.clientY);
       }
 
@@ -328,11 +376,19 @@ export function Battle({ config, localTeam, opponentName, onExit }: BattleProps)
   const crownsFor = localTeam === 0 ? hud.crownsBlue : hud.crownsRed;
   const crownsAgainst = localTeam === 0 ? hud.crownsRed : hud.crownsBlue;
 
-  // Damage the local player has put into enemy towers, summed from the towers
-  // themselves rather than tracked incrementally — the entities are the record.
-  const towerDamageDealt = runner.state.entities
-    .filter((e) => e.towerIndex >= 0 && TOWER_LAYOUTS[e.towerIndex].team !== localTeam)
-    .reduce((sum, tower) => sum + (tower.maxHp - tower.hp), 0);
+  /*
+   * Damage the local player has put into enemy towers, summed from the towers
+   * themselves rather than tracked incrementally — the entities are the record.
+   *
+   * Only computed once the match is over. This is a full entity-list scan and
+   * it is read by nothing but the result overlay, so running it on every render
+   * was pure waste.
+   */
+  const towerDamageDealt = !finished
+    ? 0
+    : runner.state.entities
+        .filter((e) => e.towerIndex >= 0 && TOWER_LAYOUTS[e.towerIndex].team !== localTeam)
+        .reduce((sum, tower) => sum + (tower.maxHp - tower.hp), 0);
 
   return (
     <div className="stage">
@@ -364,8 +420,8 @@ export function Battle({ config, localTeam, opponentName, onExit }: BattleProps)
           }}
         />
 
-        <div className="battle-hud">
-          <AetherBar points={hud.aether} multiplier={multiplier} />
+        <div className="battle-hud" ref={liveRef}>
+          <AetherBar valueRef={aetherValueRef} multiplier={multiplier} />
           {/* The running trade. A player cannot learn to make good trades
               without being told what their trades are — this is the number the
               whole skill of the genre is measured in, and it was nowhere. */}
@@ -393,9 +449,7 @@ export function Battle({ config, localTeam, opponentName, onExit }: BattleProps)
         </div>
       </div>
 
-      {draggedCard && dragPoint && (
-        <DragPortrait card={draggedCard} x={dragPoint.x} y={dragPoint.y} />
-      )}
+      {draggedCard && <DragPortrait ref={dragPortraitRef} card={draggedCard} />}
 
       {countdown > 0 && (
         <div className="countdown-overlay">

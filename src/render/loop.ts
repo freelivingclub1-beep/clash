@@ -15,7 +15,7 @@ import type { MatchRunner } from '@game/match';
 import type { Team } from '@sim/types';
 import { AP_PER_AETHER } from '@sim/constants';
 import { drawArena, drawDeployOverlay, drawPlacementGhost } from './arena';
-import { drawEntities, drawEffects } from './entities';
+import { drawEntities } from './entities';
 import {
   type Viewport,
   applyViewport,
@@ -25,7 +25,11 @@ import {
   FIELD_TOP,
   FIELD_HEIGHT,
 } from './camera';
+import { warmSprites } from './sprites';
 import { VfxSystem } from './vfx';
+import { tryGetCard } from '@cards/registry';
+import type { CardDefinition } from '@cards/schema';
+import type { MatchState } from '@sim/types';
 import { audio, cueForEvent } from './audio';
 
 export interface DragState {
@@ -97,8 +101,39 @@ export class BattleRenderer {
     this.viewport = computeViewport(cssWidth, cssHeight, dpr);
   }
 
+  /**
+   * Every card whose figure can appear this match: both decks, whatever those
+   * cards spawn on death or on a timer, and the tower troops already standing.
+   * Warming the whole registry instead would rasterise a hundred-odd unused
+   * cards; this is the set that can actually reach the board.
+   */
+  private static warmSet(state: MatchState): CardDefinition[] {
+    const ids = new Set<string>();
+    for (const player of state.players) for (const id of player.deck) ids.add(id);
+    for (const entity of state.entities) ids.add(entity.cardId);
+    // A card's spawned children are named by `deathEffectParam`.
+    for (const id of [...ids]) {
+      const param = tryGetCard(id)?.deathEffectParam;
+      if (param) ids.add(param);
+    }
+    const cards: CardDefinition[] = [];
+    for (const id of ids) {
+      const card = tryGetCard(id);
+      if (card) cards.push(card);
+    }
+    return cards;
+  }
+
   start(): void {
     if (this.running) return;
+
+    /*
+     * Rasterise every figure that can appear in this match before the first
+     * frame, rather than paying for each card's walk and strike cycles inside
+     * the frame that first draws it.
+     */
+    warmSprites(BattleRenderer.warmSet(this.runner.state));
+
     this.running = true;
     this.lastTimestamp = 0;
     const frame = (timestamp: number): void => {
@@ -170,7 +205,6 @@ export class BattleRenderer {
     ctx.clip();
 
     drawEntities(ctx, state, this.runner, this.viewTeam);
-    drawEffects(ctx, state, this.viewTeam);
 
     // Arcs first: a bolt belongs behind the figures it connects, not over them.
     this.vfx.drawBolts(ctx);

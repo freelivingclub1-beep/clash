@@ -54,10 +54,16 @@ function healthBar(
 /**
  * Walk-cycle phase for a unit.
  *
- * Driven by the simulation tick and the unit's own speed, so a Very Fast troop
- * visibly strides faster than a Slow one, and a stationary unit holds a pose
- * instead of marching on the spot. Offset by entity id so a spawned group does
- * not move in lockstep like a single organism.
+ * Driven by the unit's own speed, so a Very Fast troop visibly strides faster
+ * than a Slow one, and a stationary unit holds a pose instead of marching on
+ * the spot. Offset by entity id so a spawned group does not move in lockstep
+ * like a single organism.
+ *
+ * `tick` here is *fractional* — the simulation tick plus the renderer's
+ * interpolation alpha. It used to be the integer tick, which meant bodies slid
+ * between positions smoothly while their legs snapped forward only 30 times a
+ * second. That mismatch is what read as "the models aren't animated": the
+ * translation was already interpolated, the animation driving it was not.
  */
 function walkPhase(entity: Entity, tick: number): number {
   const moving = entity.stepX !== 0 || entity.stepY !== 0;
@@ -525,6 +531,33 @@ function shotLookFor(card: CardDefinition | undefined): ShotLook {
 /** Lobbed shots travel in an arc and cast a shadow; flat ones fly straight. */
 const LOBBED: ReadonlySet<ShotLook> = new Set<ShotLook>(['bomb', 'ball']);
 
+/**
+ * Cached corona for bolt-type shots.
+ *
+ * `drawProjectile` draws five trail ghosts plus the body, so every bolt in
+ * flight was building six radial gradients a frame — ten bolts on screen meant
+ * sixty gradient objects per frame, each one allocated and thrown away.
+ *
+ * Safe to cache because the gradient is defined at the origin in the *local*
+ * space of an already-translated context, and a canvas gradient is resolved
+ * against the transform in effect when it is used rather than when it is made.
+ */
+const boltGlowCache = new Map<string, CanvasGradient>();
+
+function boltGlow(ctx: CanvasRenderingContext2D, tint: string, scale: number): CanvasGradient {
+  const radius = 11 * scale;
+  const key = `${tint}|${radius.toFixed(2)}`;
+  let glow = boltGlowCache.get(key);
+  if (!glow) {
+    glow = ctx.createRadialGradient(0, 0, 0, 0, 0, radius);
+    glow.addColorStop(0, '#ffffff');
+    glow.addColorStop(0.35, tint);
+    glow.addColorStop(1, 'rgba(0,0,0,0)');
+    boltGlowCache.set(key, glow);
+  }
+  return glow;
+}
+
 /** Draws one shot body at the origin, pointing along +X. Caller sets transform. */
 function drawShotBody(ctx: CanvasRenderingContext2D, look: ShotLook, tint: string, scale: number): void {
   ctx.lineCap = 'round';
@@ -573,11 +606,7 @@ function drawShotBody(ctx: CanvasRenderingContext2D, look: ShotLook, tint: strin
 
     case 'bolt': {
       // Glowing core inside a soft corona, so magic reads as magic.
-      const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, 11 * scale);
-      glow.addColorStop(0, '#ffffff');
-      glow.addColorStop(0.35, tint);
-      glow.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = glow;
+      ctx.fillStyle = boltGlow(ctx, tint, scale);
       ctx.beginPath();
       ctx.arc(0, 0, 11 * scale, 0, Math.PI * 2);
       ctx.fill();
@@ -726,6 +755,11 @@ export function drawEntities(
   runner: MatchRunner,
   viewTeam: Team,
 ): void {
+  // Fractional tick: whole ticks plus how far the renderer is between them.
+  // Animation is sampled on this rather than on `state.tick` so poses advance
+  // every frame, at the same cadence as the interpolated positions.
+  const animTick = state.tick + runner.alpha;
+
   // Resolve interpolated screen positions first so the sort is on final
   // on-screen depth rather than on simulation coordinates.
   const drawList = state.entities
@@ -749,41 +783,20 @@ export function drawEntities(
         drawProjectile(ctx, entity, screenX, screenY, viewTeam);
         break;
       default:
-        drawTroop(ctx, entity, screenX, screenY, state.tick);
+        drawTroop(ctx, entity, screenX, screenY, animTick);
     }
   }
 }
 
-/** Short-lived hit and spell markers, driven by this tick's sim events. */
-export function drawEffects(
-  ctx: CanvasRenderingContext2D,
-  state: MatchState,
-  viewTeam: Team,
-): void {
-  for (const event of state.events) {
-    if (event.type === 'hit' && event.splash) {
-      const centre = tileToLogical(fxToFloat(event.x), fxToFloat(event.y), viewTeam);
-      ctx.strokeStyle = 'rgba(255,220,120,0.8)';
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.ellipse(centre.x, centre.y, TILE_W * 0.8, TILE_H * 0.9, 0, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-    if (event.type === 'spell') {
-      const centre = tileToLogical(fxToFloat(event.x), fxToFloat(event.y), viewTeam);
-      const radius = fxToFloat(event.radius);
-      ctx.fillStyle = 'rgba(255,140,60,0.35)';
-      ctx.beginPath();
-      ctx.ellipse(centre.x, centre.y, radius * TILE_W, radius * TILE_H, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    if (event.type === 'ability') {
-      const centre = tileToLogical(fxToFloat(event.x), fxToFloat(event.y), viewTeam);
-      ctx.strokeStyle = 'rgba(255,216,74,0.9)';
-      ctx.lineWidth = 6;
-      ctx.beginPath();
-      ctx.ellipse(centre.x, centre.y, TILE_W * 1.6, TILE_H * 1.8, 0, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-  }
-}
+/*
+ * `drawEffects` used to live here: single-frame rings for hit / spell / ability
+ * events, read straight off `state.events`.
+ *
+ * Removed, because it was a duplicate that also flickered. `VfxSystem` already
+ * handles all three event types with timed, animated rings, particle bursts and
+ * screen shake, fed from the properly drained event buffer. This version read
+ * `state.events` directly instead, so a frame covering two ticks dropped the
+ * first tick's markers entirely and a frame covering none drew the previous
+ * tick's markers a second time — the impact ring appeared for an unpredictable
+ * number of frames, which is exactly the inconsistency it was meant to signal.
+ */

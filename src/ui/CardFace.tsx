@@ -11,6 +11,7 @@
  * it.
  */
 
+import { forwardRef } from 'react';
 import { type CardDefinition } from '@cards/schema';
 import { portraitDataUrl } from '@render/sprites';
 
@@ -51,17 +52,29 @@ export function CardFace({ card, showName = true }: CardFaceProps) {
  * can see what is about to land while the translucent troops on the field show
  * you where.
  */
-export function DragPortrait({ card, x, y }: { card: CardDefinition; x: number; y: number }) {
-  const isSpell = card.category === 'Spell';
-  const portrait = isSpell ? '' : portraitDataUrl(card);
-  return (
-    <div
-      className={`drag-portrait${isSpell ? ' spell' : ''}`}
-      style={{ left: x, top: y, background: card.tint }}
-    >
-      {isSpell && <span className="spell-glyph" />}
-      {portrait && <img src={portrait} alt="" draggable={false} />}
-      <span className="drag-portrait-cost">{card.aetherCost}</span>
-    </div>
-  );
-}
+/**
+ * The figure that follows your finger while you drag a card out.
+ *
+ * Deliberately takes a ref rather than x/y props. Position changes at pointer
+ * rate — up to 120Hz on a modern touchscreen — and routing that through React
+ * state re-renders the whole battle tree on every pointermove, during the one
+ * interaction where smoothness is most visible. The owner moves this element
+ * directly with a transform instead, which stays on the compositor.
+ */
+export const DragPortrait = forwardRef<HTMLDivElement, { card: CardDefinition }>(
+  function DragPortrait({ card }, ref) {
+    const isSpell = card.category === 'Spell';
+    const portrait = isSpell ? '' : portraitDataUrl(card);
+    return (
+      <div
+        ref={ref}
+        className={`drag-portrait${isSpell ? ' spell' : ''}`}
+        style={{ background: card.tint }}
+      >
+        {isSpell && <span className="spell-glyph" />}
+        {portrait && <img src={portrait} alt="" draggable={false} />}
+        <span className="drag-portrait-cost">{card.aetherCost}</span>
+      </div>
+    );
+  },
+);

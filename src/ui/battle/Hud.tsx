@@ -51,21 +51,38 @@ export function CrownCounter({ crowns, side }: { crowns: number; side: 'blue' | 
 // Aether
 // ---------------------------------------------------------------------------
 
-export function AetherBar({ points, multiplier }: { points: number; multiplier: number }) {
-  const aether = points / AP_PER_AETHER;
+/**
+ * The aether bar, driven by CSS rather than by React.
+ *
+ * Aether rises on *every* simulation tick, so this is the one HUD element whose
+ * value genuinely changes 30 times a second. Rendering it from React state
+ * meant the entire battle tree — timer, crowns, ability button, four card tiles
+ * and their portraits — reconciled at that rate for the sake of a bar moving a
+ * fraction of a pixel. That was the single largest cost in the frame.
+ *
+ * Now the cells are static DOM. The owner writes one `--aether` custom property
+ * on an ancestor each frame and each cell works out its own fill from its index,
+ * so the bar animates at the full frame rate while React hears nothing at all.
+ */
+export function AetherBar({
+  valueRef,
+  multiplier,
+}: {
+  valueRef: React.Ref<HTMLSpanElement>;
+  multiplier: number;
+}) {
   return (
     <div className="aether-row">
-      <span className="aether-value">{aether.toFixed(1)}</span>
+      <span className="aether-value" ref={valueRef}>
+        0.0
+      </span>
       <div className="aether-bar">
-        {Array.from({ length: 10 }, (_, i) => {
-          // Each cell is one whole aether; the active one fills fractionally.
-          const fill = Math.max(0, Math.min(1, aether - i));
-          return (
-            <div key={i} className="aether-cell">
-              <div className="aether-fill" style={{ width: `${fill * 100}%` }} />
-            </div>
-          );
-        })}
+        {Array.from({ length: 10 }, (_, i) => (
+          <div key={i} className="aether-cell">
+            {/* Each cell is one whole aether; the active one fills fractionally. */}
+            <div className="aether-fill" style={{ '--i': i } as React.CSSProperties} />
+          </div>
+        ))}
       </div>
       {multiplier > 1 && (
         <span className="aether-value" style={{ color: 'var(--gold)' }}>

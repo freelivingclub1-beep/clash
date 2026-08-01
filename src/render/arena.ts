@@ -265,7 +265,19 @@ function buildArenaLayer(grid: ArenaGrid, viewTeam: Team): HTMLCanvasElement {
 }
 
 export function drawArena(ctx: CanvasRenderingContext2D, grid: ArenaGrid, viewTeam: Team): void {
-  const key = `${grid.version}|${viewTeam}`;
+  /*
+   * Keyed on the viewing side alone, deliberately.
+   *
+   * This layer is terrain: grass, dirt paths, the river and its bridges. The
+   * only thing it reads from the grid is `isRiverTile`, which is fixed for the
+   * whole match. It used to be keyed on `grid.version` as well — but that
+   * counter bumps on every `setOccupied`, i.e. every time a building is placed
+   * or dies, so putting down a Cannon threw away the cache and rebuilt all 576
+   * tiles, both texture passes, the paths, the river, the planks and two
+   * gradients, synchronously inside the frame. A guaranteed hitch, for a
+   * repaint that produced an identical image.
+   */
+  const key = `${viewTeam}`;
   if (!cached || cached.key !== key) {
     cached = { canvas: buildArenaLayer(grid, viewTeam), key };
   }
@@ -281,12 +293,15 @@ export function drawArena(ctx: CanvasRenderingContext2D, grid: ArenaGrid, viewTe
 /** Drop the composited arena — used when the canvas or textures are rebuilt. */
 export function invalidateArenaCache(): void {
   cached = null;
+  deployCache = null;
 }
 
 /**
  * Tint every tile the player may legally drop on. Shown only while a card is
  * being dragged, so the rules are discoverable without a tutorial.
  */
+let deployCache: { canvas: HTMLCanvasElement; key: string } | null = null;
+
 export function drawDeployOverlay(
   ctx: CanvasRenderingContext2D,
   grid: ArenaGrid,
@@ -296,16 +311,37 @@ export function drawDeployOverlay(
   viewTeam: Team,
   anywhere = false,
 ): void {
+  /*
+   * Cached to its own layer, because this runs during a drag — the one moment
+   * where a dropped frame is most obvious.
+   *
+   * Evaluating the deploy rules over all 576 tiles and allocating three objects
+   * per tile for the rect, every frame, cost roughly 1,700 allocations a frame
+   * for a mask that only changes when a lane opens, a building lands, or you
+   * pick up a different kind of card. Now that is a single `drawImage`.
+   */
+  const key = `${grid.version}|${team}|${viewTeam}|${flying}|${anywhere}|${rights.laneOpen.join('')}`;
+  if (!deployCache || deployCache.key !== key) {
+    const canvas = document.createElement('canvas');
+    canvas.width = LOGICAL_W;
+    canvas.height = FIELD_HEIGHT;
+    const layer = canvas.getContext('2d');
+    if (!layer) return;
+    layer.fillStyle = '#ffffff';
+    for (let ty = 0; ty < GRID_H; ty++) {
+      for (let tx = 0; tx < GRID_W; tx++) {
+        if (!canDeployAt(grid, team, tx, ty, rights, flying, anywhere)) continue;
+        const rect = tileRect(tx, ty, viewTeam);
+        // The layer is drawn at FIELD_TOP, so shift into its local space.
+        layer.fillRect(rect.x, rect.y - FIELD_TOP, rect.w + 0.5, rect.h + 0.5);
+      }
+    }
+    deployCache = { canvas, key };
+  }
+
   ctx.save();
   ctx.globalAlpha = 0.2;
-  ctx.fillStyle = '#ffffff';
-  for (let ty = 0; ty < GRID_H; ty++) {
-    for (let tx = 0; tx < GRID_W; tx++) {
-      if (!canDeployAt(grid, team, tx, ty, rights, flying, anywhere)) continue;
-      const rect = tileRect(tx, ty, viewTeam);
-      ctx.fillRect(rect.x, rect.y, rect.w + 0.5, rect.h + 0.5);
-    }
-  }
+  ctx.drawImage(deployCache.canvas, 0, FIELD_TOP);
   ctx.restore();
 }
 

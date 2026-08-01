@@ -34,9 +34,19 @@ import {
 } from './models';
 
 export const SPRITE_SIZE = 96;
-export const POSE_COUNT = 6;
+/**
+ * Frames in the walk cycle.
+ *
+ * Twelve rather than six. The phase driving this is now sampled on a fractional
+ * tick, so it advances every frame; at six frames the cycle still visibly
+ * stepped, because the limiting factor had become the number of distinct
+ * pictures rather than how often they were chosen. Each extra pose is one more
+ * cached 96px bitmap per card per team, and only cards actually played are ever
+ * rasterised, so the cost is bounded by deck size rather than roster size.
+ */
+export const POSE_COUNT = 12;
 /** Frames in the attack animation. Fewer than the walk cycle: a swing is quick. */
-export const STRIKE_POSE_COUNT = 5;
+export const STRIKE_POSE_COUNT = 8;
 
 export type Team = 0 | 1;
 
@@ -893,6 +903,30 @@ export interface DrawnSprite {
   source: CanvasImageSource;
   width: number;
   height: number;
+}
+
+/**
+ * Rasterise a card's figures ahead of time, for both sides.
+ *
+ * Poses are generated lazily on first use, which means the first time a card
+ * appears the frame that draws it also rasterises its whole walk cycle, and the
+ * first time it swings, its whole strike cycle — synchronously, inside the
+ * animation callback. On a fresh card that was a visible hitch at exactly the
+ * moment you were watching it arrive.
+ *
+ * Called once as a match starts, so every card in play is already resident
+ * before it can be deployed. Cheap to call repeatedly: generation is
+ * cache-guarded, so a warmed card costs a map lookup.
+ */
+export function warmSprites(cards: readonly CardDefinition[]): void {
+  for (const card of cards) {
+    if (!card.modelId) continue;
+    for (const team of [0, 1] as const) {
+      const key = `${card.id}|${team}`;
+      if (!generatedCache.has(key)) generatedCache.set(key, generatePoses(card, team));
+      if (!strikeCache.has(key)) strikeCache.set(key, generateStrikePoses(card, team));
+    }
+  }
 }
 
 /**
