@@ -12,6 +12,10 @@ export declare function composeAtlas(opts: {
   walkFrames: number;
   strikeFrames: number;
 }): unknown;
+export declare function recolour(
+  sheet: unknown,
+  palette: { hue: number; sat: number; light: number },
+): unknown;
 export declare function encode(png: unknown, colours?: number): Buffer;
 export declare const CELL: number;
 export declare const LOGICAL: number;

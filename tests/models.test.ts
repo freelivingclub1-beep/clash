@@ -1,9 +1,10 @@
+import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import '@cards/data';
 import { BUILTIN_CARDS } from '@cards/data';
 import { selectableCards, getCard } from '@cards/registry';
 import { MODELS, knownModelIds } from '@render/models';
-import { PASSIVE_EPP_COST } from '@cards/balance';
+import { EPP_PER_AETHER, PASSIVE_EPP_COST } from '@cards/balance';
 import { hasPassive } from '@sim/scripts/passives';
 import { createMatch, forceSpawn } from '@sim/state';
 import { stepMatch, stepMatchBy, hashMatchState } from '@sim/tick';
@@ -105,6 +106,24 @@ describe('character models', () => {
     expect(duplicates).toEqual([]);
   });
 
+  it('declares each model exactly once in the source', () => {
+    /*
+     * A repeated key in an object literal is not an error in JavaScript — the
+     * later one silently wins — so a model added under a name already in use
+     * quietly replaces the figure belonging to another card, and every test
+     * here still passes because the registry it reads has one entry.
+     *
+     * That happened. The build printed a warning nobody was reading. Reading
+     * the source is the only place the second declaration still exists.
+     */
+    const source = readFileSync(new URL('../src/render/models.ts', import.meta.url), 'utf8');
+    const declared = [...source.matchAll(/^ {2}([A-Za-z0-9_]+): model\(/gm)].map((m) => m[1]);
+    const seen = new Set<string>();
+    const repeated = declared.filter((id) => (seen.has(id) ? true : (seen.add(id), false)));
+    expect(repeated).toEqual([]);
+    expect(declared.length).toBe(knownModelIds().length);
+  });
+
   it('covers a wide spread of body plans rather than reskinning one', () => {
     const plans = new Set(knownModelIds().map((id) => MODELS[id].body));
     expect(plans.size).toBeGreaterThanOrEqual(10);
@@ -187,11 +206,37 @@ describe('targeting spread', () => {
 
 describe('second-wave passives', () => {
   it('prices every passive the new cards name', () => {
+    /*
+     * A price of zero is the failure this catches: a card naming a mechanic
+     * the table has never heard of gets it free, and the audit has nothing to
+     * say. A *negative* price is a different thing entirely — a drawback sold
+     * back into the stat budget rather than a mechanic bought out of it — so
+     * it is allowed, and named here so it stays deliberate.
+     */
+    const drawbacks = new Set(['gift_aether']);
     for (const card of BUILTIN_CARDS) {
       if (card.passiveId === 'none') continue;
       expect(hasPassive(card.passiveId), `${card.name}`).toBe(true);
-      expect(PASSIVE_EPP_COST[card.passiveId], `${card.name} price`).toBeGreaterThan(0);
+      const price = PASSIVE_EPP_COST[card.passiveId];
+      expect(price, `${card.name} price`).toBeDefined();
+      if (drawbacks.has(card.passiveId)) {
+        expect(price, `${card.name} is a drawback`).toBeLessThan(0);
+      } else {
+        expect(price, `${card.name} price`).toBeGreaterThan(0);
+      }
     }
+  });
+
+  it('refunds less than a full card for the one mechanic priced below zero', () => {
+    /*
+     * A drawback that paid for itself entirely would not be a drawback: the
+     * card would get the stats *and* the aether back, and there would be no
+     * decision in playing it. The refund has to be smaller than the cost of
+     * the cheapest card it could be attached to.
+     */
+    const refund = -PASSIVE_EPP_COST.gift_aether;
+    expect(refund).toBeGreaterThan(0);
+    expect(refund).toBeLessThan(EPP_PER_AETHER);
   });
 
   it('Powder Cart detonates and destroys itself on contact', () => {

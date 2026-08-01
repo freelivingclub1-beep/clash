@@ -176,9 +176,7 @@ describe('armour break', () => {
 describe('drawn effects', () => {
   const hit = (splash: boolean): SimEvent => ({
     type: 'hit',
-    entityId: 1,
     cardId: 'knight',
-    team: 0,
     x: fx(8),
     y: fx(12),
     damage: 100,

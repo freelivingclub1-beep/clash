@@ -81,6 +81,50 @@ export function frameSize(sheet) {
   return 64;
 }
 
+/**
+ * Recolour a sheet, keeping its shading.
+ *
+ * LPC ships each hairstyle as a single sheet in one base colour and recolours
+ * it at runtime from a palette. The build was not doing that, so a hundred and
+ * fifty figures came out of it with the identical ginger crop — the one detail
+ * most likely to make two otherwise different characters read as the same
+ * person.
+ *
+ * Hue and saturation are replaced and lightness is scaled rather than set, so
+ * the artist's shading survives: the highlights stay highlights and the
+ * shadows stay shadows, which a flat colour fill would destroy.
+ */
+export function recolour(sheet, { hue, sat, light }) {
+  const out = new PNG({ width: sheet.width, height: sheet.height, filterType: -1 });
+  sheet.data.copy(out.data);
+  for (let i = 0; i < out.data.length; i += 4) {
+    if (out.data[i + 3] === 0) continue;
+    const r = out.data[i] / 255;
+    const g = out.data[i + 1] / 255;
+    const b = out.data[i + 2] / 255;
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const l = Math.min(1, ((max + min) / 2) * light);
+    const c = (1 - Math.abs(2 * l - 1)) * sat;
+    const hp = (hue % 360) / 60;
+    const x = c * (1 - Math.abs((hp % 2) - 1));
+    let rr = 0;
+    let gg = 0;
+    let bb = 0;
+    if (hp < 1) [rr, gg, bb] = [c, x, 0];
+    else if (hp < 2) [rr, gg, bb] = [x, c, 0];
+    else if (hp < 3) [rr, gg, bb] = [0, c, x];
+    else if (hp < 4) [rr, gg, bb] = [0, x, c];
+    else if (hp < 5) [rr, gg, bb] = [x, 0, c];
+    else [rr, gg, bb] = [c, 0, x];
+    const m = l - c / 2;
+    out.data[i] = Math.round(Math.max(0, Math.min(1, rr + m)) * 255);
+    out.data[i + 1] = Math.round(Math.max(0, Math.min(1, gg + m)) * 255);
+    out.data[i + 2] = Math.round(Math.max(0, Math.min(1, bb + m)) * 255);
+  }
+  return out;
+}
+
 /** Alpha-composite `src` over `dst` at an offset, both RGBA PNG buffers. */
 function over(dst, src, dx, dy, sx, sy, w, h) {
   for (let y = 0; y < h; y++) {

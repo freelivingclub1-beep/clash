@@ -258,6 +258,84 @@ export const PASSIVE_EPP_COST: Record<string, number> = {
   split_shot: 290,
   /** Drains the defender's aether while it connects. Attacks the clock. */
   siphon: 200,
+
+  // --- pull, leap, provoke and the rest of the second mechanics wave -------
+  /**
+   * Drags everything hostile toward it, continuously.
+   *
+   * Priced above knockback rather than beside it. A push scatters a formation
+   * and buys time; a pull gathers one, and a gathered formation is what every
+   * splash card in the set is waiting for — so this is half of a two-card play
+   * whose other half the opponent also has to answer.
+   */
+  vortex_pull: 340,
+  /**
+   * Yanks whatever it hits out of position, stunned on arrival.
+   *
+   * The only mechanic that answers a *formation* rather than a unit: the
+   * support standing safely behind a tank is not safe. Dear because the play
+   * it enables — hooking the one card that matters into your own bodies — has
+   * no counter except spacing, which costs the opponent tempo either way.
+   */
+  hook_pull: 320,
+  /**
+   * Vaults past the front line and lands on what is behind it, with splash.
+   *
+   * The most expensive positional mechanic here, because it ignores the thing
+   * defence is made of. Every cheap body in the game works by standing in the
+   * way; this does not care.
+   */
+  leap_strike: 420,
+  /**
+   * Leaves a working turret where it died.
+   *
+   * Two cards of value out of one deployment, so it is priced as most of a
+   * second card. The discount is that the wreck arrives where the fight
+   * already went badly, which is rarely where you would have placed it.
+   */
+  wreckage: 360,
+  /**
+   * Hands the opponent aether when it dies. The only price below zero.
+   *
+   * Everything else in this table buys a mechanic out of the stat budget.
+   * This sells a drawback back into it, which is what lets the card be
+   * enormous for its cost — and what makes every one you lose fund the answer
+   * to the next. Refunding less than a full card's cost is deliberate: a
+   * drawback that paid for itself entirely would be no drawback at all.
+   */
+  gift_aether: -260,
+  /**
+   * Refuses one shot per window and returns it.
+   *
+   * Cheaper than `reflect_ranged` looks like it should be, because it fires
+   * on a cooldown rather than on every hit: a fast shooter simply pays
+   * through it, and only a slow heavy one is genuinely answered.
+   */
+  deflect: 270,
+  /**
+   * Forces everything nearby to attack it.
+   *
+   * The one defensive mechanic that protects things it is not standing in
+   * front of. Priced as a heavy mechanic and paid for out of the health it
+   * would otherwise have, so the answer is simply to kill it.
+   */
+  taunt: 330,
+  /** Its blows stop the victim swinging back. Near-total against one big threat, blank against a swarm. */
+  disarm: 300,
+  /** Everything around it swings faster. Worth nothing alone, a great deal behind a push. */
+  rally: 290,
+  /** Holds and hurts the ground around it. Punishes a defence for standing still. */
+  quicksand: 280,
+  /**
+   * Banks the blows it did not land into the next one.
+   *
+   * The inverse of `attack_ramp` and much cheaper, because it pays out once
+   * and then resets — the ceiling is a single large hit rather than an
+   * escalating stream that never stops.
+   */
+  overcharge: 310,
+  /** Heals everything near it when it dies. Killing it is the heal. */
+  bloodpact: 250,
   /**
    * Tops nearby allies up to a small armour layer every few seconds.
    *

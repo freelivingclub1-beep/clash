@@ -21,7 +21,7 @@ import '../../src/cards/data';
 import { selectableCards } from '../../src/cards/registry';
 import { MODELS } from '../../src/render/models';
 import type { BodyPlan, BuildKind, ModelSpec, WeaponKind } from '../../src/render/models';
-import { readSheet, listEntries, composeAtlas, encode, type Layer } from './compose.mjs';
+import { readSheet, listEntries, composeAtlas, encode, recolour, type Layer } from './compose.mjs';
 
 const SRC = process.env.LPC_DIR ?? '/tmp/lpc/lpc-runtime-zips/zips';
 const OUT = 'src/assets/characters';
@@ -242,6 +242,32 @@ const HORN_STYLES = ['backwards', 'curled'];
 const WING_STYLES = ['bat', 'dragonfly', 'feathered', 'lizard', 'lunar', 'monarch', 'pixie'];
 const TAIL_STYLES = ['cat', 'fluffy', 'lizard', 'wolf'];
 
+/**
+ * Hair colours.
+ *
+ * The pack ships one sheet per style in a single base colour and recolours it
+ * from a palette at runtime, which this build does at compose time instead.
+ * Mostly plausible human shades, with a few that are not — a goblin or a
+ * frankenstein wearing moss green reads as the creature it is rather than as a
+ * man who happens to be green.
+ */
+const HAIR_COLOURS: ReadonlyArray<{ hue: number; sat: number; light: number }> = [
+  { hue: 28, sat: 0.16, light: 0.42 },  // black
+  { hue: 24, sat: 0.34, light: 0.62 },  // dark brown
+  { hue: 30, sat: 0.44, light: 0.9 },   // chestnut
+  { hue: 42, sat: 0.55, light: 1.25 },  // blond
+  { hue: 46, sat: 0.28, light: 1.45 },  // ash blond
+  { hue: 18, sat: 0.62, light: 0.95 },  // auburn
+  { hue: 12, sat: 0.7, light: 1.05 },   // ginger
+  { hue: 0, sat: 0.06, light: 1.5 },    // white
+  { hue: 210, sat: 0.1, light: 1.15 },  // grey
+  { hue: 200, sat: 0.5, light: 1.0 },   // steel blue
+  { hue: 285, sat: 0.42, light: 0.95 }, // violet
+  { hue: 110, sat: 0.4, light: 0.85 },  // moss
+  { hue: 165, sat: 0.45, light: 1.0 },  // sea green
+  { hue: 330, sat: 0.45, light: 1.05 }, // rose
+];
+
 /** Sash colours, now a per-card accent rather than a team marker. */
 const SASH_COLOURS = [
   'forest', 'rose', 'sky', 'slate', 'red', 'teal', 'lavender', 'bluegray',
@@ -377,6 +403,19 @@ function colourIndex(zip: string, dir: string, anim: string, colour: string): nu
   return want >= 0 ? want : 0;
 }
 
+/** Recolour both sheets of a layer, or pass a missing layer straight through. */
+function tinted(
+  layer: Layer | null,
+  palette: { hue: number; sat: number; light: number },
+): Layer | null {
+  if (!layer) return null;
+  return {
+    ...layer,
+    walk: layer.walk ? recolour(layer.walk, palette) : layer.walk,
+    slash: layer.slash ? recolour(layer.slash, palette) : layer.slash,
+  };
+}
+
 /** Assemble the full stack for one model, ordered back to front. */
 function layersFor(modelId: string, spec: ModelSpec): Layer[] {
   const layers: Layer[] = [];
@@ -426,7 +465,8 @@ function layersFor(modelId: string, spec: ModelSpec): Layer[] {
   if (HAIRED_SPECIES.includes(species)) {
     const styles = HELMETED.has(spec.build) ? SHORT_HAIR : HAIR_STYLES;
     const style = pick(styles, modelId, 'hair');
-    push(layerFor('hair', [`${style}/adult/`, `${style}/`], strike, hash(`${modelId}|hue`)));
+    const hair = layerFor('hair', [`${style}/adult/`, `${style}/`], strike, hash(`${modelId}|hue`));
+    push(tinted(hair, pick(HAIR_COLOURS, modelId, 'haircolour')));
   }
 
   push(layerFor('legs', [`pantaloons/${sexDir}/`, 'pantaloons/male/'], strike, seed));

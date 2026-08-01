@@ -18,6 +18,7 @@ import { DEPTH_WAVE_CARDS } from './depthWave';
 import { ARSENAL_WAVE_CARDS } from './arsenalWave';
 import { SPECTACLE_WAVE_CARDS } from './spectacleWave';
 import { MENAGERIE_CARDS } from './menagerie';
+import { TEMPEST_CARDS } from './tempest';
 
 export const BUILTIN_CARDS = [
   ...TROOP_CARDS,
@@ -33,6 +34,7 @@ export const BUILTIN_CARDS = [
   ...ARSENAL_WAVE_CARDS,
   ...SPECTACLE_WAVE_CARDS,
   ...MENAGERIE_CARDS,
+  ...TEMPEST_CARDS,
 ];
 
 for (const card of BUILTIN_CARDS) registerCard(card);
@@ -75,3 +77,4 @@ export const BOT_DECK: string[] = [
   'card_towertroop_cannoneer', // slot 9 — tower troop
 ];
 export * from './menagerie';
+export * from './tempest';

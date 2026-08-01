@@ -300,6 +300,35 @@ export const MODELS: Record<string, ModelSpec> = {
   emberwing: model('insect', 'crest', 'bomb', 'wings', 0.9, 'gaunt', 'collar'),
   glassSentinel: model('golem', 'visor', 'dagger', 'none', 0.75, 'gaunt', 'collar'),
   thornCaller: model('twinned', 'crest', 'spear', 'backpack', 0.88, 'normal', 'collar'),
+
+  // --- the tempest wave -----------------------------------------------------
+  // Twenty-four figures for the mechanics that pull, leap, provoke and refuse.
+  // The rule is unchanged: no two cards may share a body|head|weapon|accessory
+  // tuple, so anything on this board can be told apart at a glance.
+  maelstromDjinn: model('floating', 'crown', 'staff', 'wings', 1.05, 'towering', 'hem'),
+  gravewell: model('structure', 'none', 'staff', 'halo', 1.1, 'hulking', 'belt'),
+  harpooner: model('humanoid', 'hood', 'spear', 'backpack', 0.95, 'lean', 'belt'),
+  chainFiend: model('insect', 'horned', 'claws', 'banner', 0.85, 'stout', 'hem'),
+  colossusKnight: model('golem', 'helm', 'hammer', 'cape', 1.5, 'hulking', 'chevron'),
+  pounceStalker: model('quadruped', 'mask', 'claws', 'none', 0.82, 'lean', 'sash'),
+  bombardCart: model('cart', 'visor', 'cannon', 'backpack', 1.0, 'stout', 'chevron'),
+  siegeWagon: model('siege', 'visor', 'bomb', 'backpack', 1.2, 'broad', 'belt'),
+  aetherGolem: model('blob', 'none', 'claws', 'halo', 1.35, 'hulking', 'hem'),
+  unstableBehemoth: model('brute', 'none', 'hammer', 'halo', 1.4, 'towering', 'shoulders'),
+  wardenMonk: model('humanoid', 'hood', 'staff', 'halo', 0.95, 'lean', 'collar'),
+  mirrorAdept: model('crystal', 'mask', 'lantern', 'cape', 0.9, 'lean', 'sash'),
+  ironProvocateur: model('shelled', 'helm', 'hammer', 'banner', 1.05, 'broad', 'belt'),
+  bannerSentinel: model('totem', 'crown', 'none', 'banner', 1.15, 'towering', 'chevron'),
+  manacleWarden: model('hunched', 'mask', 'hammer', 'shield', 1.0, 'broad', 'hem'),
+  silencer: model('wraith', 'hood', 'dagger', 'none', 0.85, 'lean', 'chevron'),
+  drumMajor: model('humanoid', 'crest', 'hammer', 'banner', 0.9, 'squat', 'collar'),
+  hornOfMuster: model('centaur', 'horned', 'none', 'banner', 1.1, 'stout', 'belt'),
+  mireWarden: model('structure', 'horned', 'none', 'none', 1.05, 'squat', 'hem'),
+  bogCrawler: model('serpent', 'beak', 'claws', 'none', 0.8, 'stout', 'belt'),
+  stormAnvil: model('golem', 'crest', 'hammer', 'none', 1.15, 'broad', 'shoulders'),
+  coilSentinel: model('tripod', 'visor', 'lantern', 'halo', 1.0, 'towering', 'sash'),
+  vitalist: model('humanoid', 'wizardHat', 'lantern', 'halo', 0.85, 'tiny', 'hem'),
+  martyrSister: model('winged', 'crown', 'staff', 'halo', 0.95, 'gaunt', 'collar'),
 };
 
 export function modelSpec(modelId: string, fallback: ModelSpec): ModelSpec {
