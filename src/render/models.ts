@@ -329,6 +329,28 @@ export const MODELS: Record<string, ModelSpec> = {
   coilSentinel: model('tripod', 'visor', 'lantern', 'halo', 1.0, 'towering', 'sash'),
   vitalist: model('humanoid', 'wizardHat', 'lantern', 'halo', 0.85, 'tiny', 'hem'),
   martyrSister: model('winged', 'crown', 'staff', 'halo', 0.95, 'gaunt', 'collar'),
+
+  // --- the artifice wave ----------------------------------------------------
+  // Eighteen figures for the cards that do something other than damage. Same
+  // rule as ever: a distinct body|head|weapon|accessory|build|trim tuple each.
+  frostSage: model('floating', 'wizardHat', 'lantern', 'cape', 0.92, 'lean', 'hem'),
+  rimeblade: model('humanoid', 'visor', 'sword', 'none', 0.98, 'normal', 'belt'),
+  glacierWarden: model('golem', 'crest', 'staff', 'shield', 1.15, 'stout', 'collar'),
+  lanceSentinel: model('siege', 'none', 'spear', 'none', 1.1, 'hulking', 'hem'),
+  javelinRider: model('cart', 'crest', 'spear', 'cape', 0.85, 'lean', 'shoulders'),
+  bombTower: model('structure', 'visor', 'bomb', 'banner', 1.15, 'broad', 'chevron'),
+  frostfallBearer: model('blob', 'mask', 'claws', 'backpack', 0.9, 'stout', 'sash'),
+  graveWarden: model('wraith', 'crown', 'scythe', 'none', 1.0, 'normal', 'hem'),
+  boneSpire: model('totem', 'skull', 'none', 'halo', 1.15, 'gaunt', 'belt'),
+  waspHive: model('structure', 'horned', 'none', 'backpack', 1.05, 'stout', 'collar'),
+  thunderAdept: model('crystal', 'crown', 'staff', 'halo', 0.95, 'normal', 'shoulders'),
+  galePriest: model('winged', 'hood', 'staff', 'none', 0.88, 'lean', 'sash'),
+  concussionGuard: model('shelled', 'helm', 'hammer', 'cape', 1.1, 'hulking', 'belt'),
+  sporeling: model('insect', 'crest', 'claws', 'halo', 0.8, 'squat', 'hem'),
+  soulCrone: model('floating', 'skull', 'staff', 'banner', 0.95, 'gaunt', 'chevron'),
+  pyreMonk: model('hunched', 'wizardHat', 'lantern', 'none', 0.95, 'stout', 'collar'),
+  tempestHerald: model('centaur', 'crest', 'staff', 'wings', 1.15, 'broad', 'hem'),
+  warchanter: model('swarm', 'mask', 'dagger', 'banner', 0.75, 'tiny', 'shoulders'),
 };
 
 export function modelSpec(modelId: string, fallback: ModelSpec): ModelSpec {

@@ -276,6 +276,17 @@ export const cardDefinitionSchema = identitySchema
     ) {
       fail('splashRadius', 'Splash damage types require a splash radius above 0.');
     }
+    /*
+     * A beam with no width hits nothing but the thing it was aimed at.
+     *
+     * `splashRadius` is how far off the shot line a body can stand and still be
+     * struck, so a piercing card that leaves it at zero is a single-target card
+     * wearing a different damage type — which is what two of these were, and
+     * neither the schema nor any test had anything to say about it.
+     */
+    if (card.damageType === 'PiercingLine' && card.splashRadius <= 0) {
+      fail('splashRadius', 'A piercing line needs a beam width above 0.');
+    }
     if (card.category !== 'Spell' && card.splashRadius > 3) {
       fail('splashRadius', 'Troop and building splash is capped at 3.0 tiles (spec §4D).');
     }

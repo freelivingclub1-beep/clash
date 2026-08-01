@@ -69,30 +69,42 @@ const BODY_BY_BUILD: Record<BuildKind, string> = {
  * silhouette the card already had rather than its name — the plan was chosen
  * to make cards distinguishable and that work should not be thrown away.
  */
+/**
+ * Species by body plan — at least five each.
+ *
+ * The count is not decoration. A card's figure varies along the species, the
+ * body frame, the weapon and the hair; a weaponless card on a plan whose
+ * species have no hair varies along *one* axis, so the entire space of
+ * distinguishable figures is the length of this list. Three cards on that
+ * shape with a three-entry pool is a build failure, and was.
+ *
+ * The plan still sets the character of the list — a brute reads as heavy
+ * whichever of its heads it draws — it just no longer determines the figure.
+ */
 const HEADS_BY_PLAN: Record<BodyPlan, readonly string[]> = {
-  humanoid: ['human/male', 'orc/male', 'vampire/adult'],
-  brute: ['troll/adult', 'minotaur/male', 'boarman/adult'],
-  golem: ['frankenstein/adult', 'zombie/adult', 'orc/male'],
-  winged: ['jack/adult', 'vampire/adult', 'alien/adult'],
-  serpent: ['lizard/male', 'boarman/adult'],
-  mech: ['alien/adult', 'frankenstein/adult'],
-  orb: ['alien/adult', 'jack/adult'],
-  insect: ['mouse/adult', 'rat/adult'],
-  shelled: ['boarman/adult', 'pig/adult'],
-  wraith: ['skeleton/adult', 'zombie/adult', 'jack/adult'],
-  quadruped: ['wolf/male', 'mouse/adult'],
-  structure: ['human/male', 'orc/male'],
-  cart: ['goblin/adult', 'rat/adult'],
-  centaur: ['wartotaur/adult', 'minotaur/male'],
-  floating: ['vampire/adult', 'jack/adult', 'skeleton/adult'],
-  totem: ['sheep/adult', 'troll/adult'],
-  tripod: ['rat/adult', 'mouse/adult'],
-  blob: ['pig/adult', 'sheep/adult'],
-  crystal: ['zombie/adult', 'alien/adult'],
-  swarm: ['goblin/adult', 'rabbit/adult'],
-  siege: ['orc/male', 'troll/adult'],
-  hunched: ['minotaur/male', 'boarman/adult'],
-  twinned: ['rabbit/adult', 'human/male'],
+  humanoid: ['human/male', 'orc/male', 'vampire/adult', 'goblin/adult', 'zombie/adult'],
+  brute: ['troll/adult', 'minotaur/male', 'boarman/adult', 'wartotaur/adult', 'orc/male'],
+  golem: ['frankenstein/adult', 'zombie/adult', 'orc/male', 'troll/adult', 'skeleton/adult'],
+  winged: ['jack/adult', 'vampire/adult', 'alien/adult', 'rabbit/adult', 'mouse/adult'],
+  serpent: ['lizard/male', 'boarman/adult', 'rat/adult', 'wolf/male', 'pig/adult'],
+  mech: ['alien/adult', 'frankenstein/adult', 'skeleton/adult', 'zombie/adult', 'orc/male'],
+  orb: ['alien/adult', 'jack/adult', 'zombie/adult', 'sheep/adult', 'rabbit/adult'],
+  insect: ['mouse/adult', 'rat/adult', 'rabbit/adult', 'goblin/adult', 'lizard/male'],
+  shelled: ['boarman/adult', 'pig/adult', 'lizard/male', 'sheep/adult', 'troll/adult'],
+  wraith: ['skeleton/adult', 'zombie/adult', 'jack/adult', 'vampire/adult', 'alien/adult'],
+  quadruped: ['wolf/male', 'mouse/adult', 'boarman/adult', 'rat/adult', 'lizard/male'],
+  structure: ['human/male', 'orc/male', 'skeleton/adult', 'goblin/adult', 'zombie/adult'],
+  cart: ['goblin/adult', 'rat/adult', 'mouse/adult', 'pig/adult', 'rabbit/adult'],
+  centaur: ['wartotaur/adult', 'minotaur/male', 'troll/adult', 'boarman/adult', 'orc/male', 'wolf/male'],
+  floating: ['vampire/adult', 'jack/adult', 'skeleton/adult', 'alien/adult', 'zombie/adult'],
+  totem: ['sheep/adult', 'troll/adult', 'pig/adult', 'boarman/adult', 'minotaur/male'],
+  tripod: ['rat/adult', 'mouse/adult', 'alien/adult', 'goblin/adult', 'lizard/male'],
+  blob: ['pig/adult', 'sheep/adult', 'boarman/adult', 'rabbit/adult', 'troll/adult'],
+  crystal: ['zombie/adult', 'alien/adult', 'frankenstein/adult', 'skeleton/adult', 'jack/adult'],
+  swarm: ['goblin/adult', 'rabbit/adult', 'mouse/adult', 'rat/adult', 'human/male'],
+  siege: ['orc/male', 'troll/adult', 'minotaur/male', 'wartotaur/adult', 'boarman/adult'],
+  hunched: ['minotaur/male', 'boarman/adult', 'wolf/male', 'troll/adult', 'lizard/male'],
+  twinned: ['rabbit/adult', 'human/male', 'sheep/adult', 'goblin/adult', 'mouse/adult'],
 };
 
 /**
@@ -640,25 +652,57 @@ function layersFor(
  */
 const SIGNATURE_N = 16;
 
-function outline(atlas: { width: number; data: Buffer }): number[] {
+interface Signature {
+  /** Coverage per cell: the outline, independent of palette. */
+  mask: number[];
+  /** Mean colour per cell, alpha-weighted. */
+  rgb: number[];
+}
+
+function outline(atlas: { width: number; data: Buffer }): Signature {
   const step = CELL / SIGNATURE_N;
-  const grid: number[] = [];
+  const mask: number[] = [];
+  const rgb: number[] = [];
   for (let y = 0; y < SIGNATURE_N; y++) {
     for (let x = 0; x < SIGNATURE_N; x++) {
+      let r = 0;
+      let g = 0;
+      let b = 0;
       let a = 0;
       let n = 0;
       for (let yy = 0; yy < step; yy++) {
         for (let xx = 0; xx < step; xx++) {
           const sx = Math.floor(x * step + xx);
           const sy = CELL + Math.floor(y * step + yy);
-          a += atlas.data[((sy * atlas.width + sx) << 2) + 3] / 255;
+          const i = (sy * atlas.width + sx) << 2;
+          const alpha = atlas.data[i + 3] / 255;
+          r += atlas.data[i] * alpha;
+          g += atlas.data[i + 1] * alpha;
+          b += atlas.data[i + 2] * alpha;
+          a += alpha;
           n++;
         }
       }
-      grid.push(a / n);
+      mask.push(a / n);
+      rgb.push(a > 0 ? r / a : 0, a > 0 ? g / a : 0, a > 0 ? b / a : 0);
     }
   }
-  return grid;
+  return { mask, rgb };
+}
+
+/**
+ * Whether two figures read as the same unit.
+ *
+ * Two thresholds, because they catch different failures. An identical outline
+ * is the one a player notices in a fight, whatever the palette. A high
+ * combined score is the one they notice on a card face, where the figure is
+ * still and colour carries. The build checked only the first and shipped a
+ * pair scoring 0.9906 on the second.
+ */
+function tooAlike(a: Signature, b: Signature): boolean {
+  const shape = similarity(a.mask, b.mask);
+  if (shape >= SAME_OUTLINE) return true;
+  return shape * 0.5 + similarity(a.rgb, b.rgb) * 0.5 >= SAME_FIGURE;
 }
 
 function similarity(a: readonly number[], b: readonly number[]): number {
@@ -673,8 +717,10 @@ function similarity(a: readonly number[], b: readonly number[]): number {
   return dot / (Math.sqrt(na) * Math.sqrt(nb) || 1);
 }
 
-/** Above this, two figures read as the same unit at the size they are drawn. */
-const TOO_ALIKE = 0.999;
+/** An outline this close is the same silhouette, whatever it is painted. */
+const SAME_OUTLINE = 0.999;
+/** Shape and colour together. Kept in step with `tests/artDistinctness`. */
+const SAME_FIGURE = 0.99;
 
 function build(): void {
   mkdirSync(OUT, { recursive: true });
@@ -682,9 +728,8 @@ function build(): void {
   const manifest: Record<string, string> = {};
   const done = new Set<string>();
   const recipes = new Set<string>();
-  const outlines: Array<{ id: string; grid: number[] }> = [];
+  const outlines: Array<{ id: string; grid: Signature }> = [];
   let made = 0;
-  let missing = 0;
   let skipped = 0;
   let rerolled = 0;
 
@@ -725,7 +770,7 @@ function build(): void {
      */
     let atlas: ReturnType<typeof composeAtlas> | null = null;
     let accepted = '';
-    let shape: number[] = [];
+    let shape: Signature = { mask: [], rgb: [] };
     for (let attempt = 0; attempt < 24; attempt++) {
       const built = layersFor(card.modelId, spec, attempt);
       if (built.layers.length === 0) break;
@@ -739,7 +784,7 @@ function build(): void {
         strikeFrames: STRIKE_FRAMES,
       });
       const grid = outline(composed as { width: number; data: Buffer });
-      const clash = outlines.find((o) => similarity(o.grid, grid) >= TOO_ALIKE);
+      const clash = outlines.find((o) => tooAlike(o.grid, grid));
       if (clash) {
         rerolled++;
         recipes.add(built.recipe);
@@ -751,9 +796,23 @@ function build(): void {
       break;
     }
 
+    /*
+     * No art is worse than similar art.
+     *
+     * A card that exhausts its re-rolls used to fall through to `missing`,
+     * which meant it silently shipped with the crude procedural fallback while
+     * the build reported success. Two cards did exactly that — both weaponless
+     * and hairless species whose plan offered only two heads, so the whole
+     * shape space was two figures and both were taken. Failing here is what
+     * makes that a build error rather than something to notice in a screenshot
+     * three weeks later.
+     */
     if (!atlas) {
-      missing++;
-      continue;
+      throw new Error(
+        `${card.modelId}: no distinct figure available — ` +
+          `plan ${spec.body} / build ${spec.build} / weapon ${spec.weapon} ` +
+          'has too few shape combinations. Widen a pool in this file.',
+      );
     }
     recipes.add(accepted);
     outlines.push({ id: card.modelId, grid: shape });
@@ -769,7 +828,7 @@ function build(): void {
   );
   console.log(
     `wrote ${made} atlases for ${cards.length} cards ` +
-      `(${missing} with no layers, ${skipped} drawn as animals, ${rerolled} re-rolled for distinctness)`,
+      `(${skipped} drawn as animals, ${rerolled} re-rolled for distinctness)`,
   );
   if (!existsSync(`${OUT}/manifest.json`)) throw new Error('manifest not written');
 }

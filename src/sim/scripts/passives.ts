@@ -1327,6 +1327,49 @@ register('bloodpact', {
   },
 });
 
+/**
+ * Soul Bind — everything it kills comes back on your side.
+ *
+ * The board had no way to convert an opponent's losses into your own gains.
+ * Every other mechanic in the set operates on what is already yours or takes
+ * something away from theirs; this turns their dead into your bodies, which
+ * makes trading into it actively bad rather than merely inefficient. The
+ * counter is not to fight it — kill it, or feed it nothing by pushing
+ * elsewhere.
+ *
+ * Only troops, and never towers or buildings: a card that spawned a unit every
+ * time it chipped a tower would be a win condition that funds itself.
+ */
+register('soul_bind', {
+  onHit: (state, self, victim, magnitude) => {
+    if (victim.alive || victim.kind === 'tower' || victim.kind === 'building') return;
+    const stats = resolveStats(self.cardId, self.level, self.evolved);
+    const spawnId = stats.card.deathEffectParam;
+    if (!spawnId) return;
+    const bodies = Math.max(1, Math.round(magnitude));
+    for (let i = 0; i < bodies; i++) {
+      const raised = spawnTroop(
+        state,
+        spawnId,
+        self.level,
+        false,
+        self.team,
+        victim.x,
+        victim.y + fx(i * 0.5),
+        { skipDeployDelay: true },
+      );
+      state.events.push({
+        type: 'spawn',
+        entityId: raised.id,
+        cardId: spawnId,
+        team: self.team,
+        x: raised.x,
+        y: raised.y,
+      });
+    }
+  },
+});
+
 // ---------------------------------------------------------------------------
 
 export function passiveHooks(passiveId: string): PassiveHooks | undefined {

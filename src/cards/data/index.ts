@@ -19,6 +19,7 @@ import { ARSENAL_WAVE_CARDS } from './arsenalWave';
 import { SPECTACLE_WAVE_CARDS } from './spectacleWave';
 import { MENAGERIE_CARDS } from './menagerie';
 import { TEMPEST_CARDS } from './tempest';
+import { ARTIFICE_CARDS } from './artifice';
 
 export const BUILTIN_CARDS = [
   ...TROOP_CARDS,
@@ -35,6 +36,7 @@ export const BUILTIN_CARDS = [
   ...SPECTACLE_WAVE_CARDS,
   ...MENAGERIE_CARDS,
   ...TEMPEST_CARDS,
+  ...ARTIFICE_CARDS,
 ];
 
 for (const card of BUILTIN_CARDS) registerCard(card);
@@ -78,3 +80,4 @@ export const BOT_DECK: string[] = [
 ];
 export * from './menagerie';
 export * from './tempest';
+export * from './artifice';

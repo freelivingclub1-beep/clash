@@ -337,6 +337,16 @@ export const PASSIVE_EPP_COST: Record<string, number> = {
   /** Heals everything near it when it dies. Killing it is the heal. */
   bloodpact: 250,
   /**
+   * Everything it kills comes back on your side.
+   *
+   * The dearest mechanic outside the spawners, and for the same reason: its
+   * real cost is the aggregate value of everything it raises, which the audit
+   * cannot see. Unlike a spawner it produces nothing on its own, so the price
+   * is set for a card that is actually winning fights rather than one standing
+   * in a lane emitting bodies on a timer.
+   */
+  soul_bind: 520,
+  /**
    * Tops nearby allies up to a small armour layer every few seconds.
    *
    * Dearer than the healing aura because overkill absorption means a point of
@@ -411,6 +421,70 @@ export function passiveCost(passiveId: string): number {
   return PASSIVE_EPP_COST[passiveId] ?? 0;
 }
 
+/**
+ * What an on-hit status costs.
+ *
+ * These were free. A hundred and thirty-one cards in the roster deal plain
+ * single-target damage and a hundred and fifty-five carry no status at all,
+ * so the omission never bit — but it means any card that *does* carry one has
+ * been getting it for nothing, and a wave of them would be a wave of strictly
+ * better cards.
+ *
+ * Priced by how much of a fight the status takes away rather than by how
+ * dramatic it looks. A slow costs the target a share of its output for the
+ * duration; a freeze costs all of it; a reset costs one swing and is therefore
+ * cheap on a slow attacker and dear on a fast one.
+ */
+export const STATUS_EPP_COST: Record<string, number> = {
+  None: 0,
+  /** Shaves speed and rate of fire. Small, constant, and stacks with itself. */
+  Slow: 170,
+  /** Takes the target out of the fight entirely for the duration. */
+  Freeze: 320,
+  /** Freeze without the movement lock — it keeps walking, it cannot swing. */
+  Stun: 240,
+  /** Pushes the target back, which buys distance rather than time. */
+  Knockback: 190,
+  /** Keeps working on buildings and towers, and outlives the attacker. */
+  Poison: 210,
+  /** Interrupts the wind-up. Devastating against slow heavy hitters. */
+  ElectroReset: 230,
+  /** Speeds an ally up. Priced with the offensive statuses because it is one. */
+  Rage: 200,
+  /** Repairs an ally. */
+  Heal: 220,
+};
+
+/**
+ * What a death effect costs.
+ *
+ * A card that leaves something behind is two cards in a trench coat, and the
+ * second one arrives exactly when the opponent has committed to killing the
+ * first. `SpawnDeathUnit` is priced per body by the caller, since dropping one
+ * skeleton and dropping six are not the same mechanic.
+ */
+export const DEATH_EFFECT_EPP_COST: Record<string, number> = {
+  None: 0,
+  /** A blast where it fell. Guaranteed value: dying is not optional. */
+  DeathBomb: 190,
+  /** A whole spell, cast for free, at the worst possible moment for the killer. */
+  DeathSpell: 260,
+  /** Bodies. Priced per unit on top of this. */
+  SpawnDeathUnit: 90,
+};
+
+/** Each extra body a `SpawnDeathUnit` card leaves behind. */
+export const DEATH_UNIT_EPP = 110;
+
+export function statusCost(status: string): number {
+  return STATUS_EPP_COST[status] ?? 0;
+}
+
+export function deathEffectCost(effect: string, count: number): number {
+  const base = DEATH_EFFECT_EPP_COST[effect] ?? 0;
+  return effect === 'SpawnDeathUnit' ? base + DEATH_UNIT_EPP * Math.max(0, count) : base;
+}
+
 // ---------------------------------------------------------------------------
 // Budget computation
 // ---------------------------------------------------------------------------
@@ -431,6 +505,11 @@ export interface BudgetInput {
   lifetimeSeconds?: number;
   /** EPP spent on a named passive, if any. */
   passiveId?: string;
+  /** On-hit status the card applies, if any. */
+  onHitStatus?: string;
+  /** What it leaves behind when it dies. */
+  deathEffect?: string;
+  deathEffectCount?: number;
   /** Extra EPP for a bespoke mechanic with no registry entry. */
   extraAbilityEpp?: number;
 }
@@ -454,7 +533,11 @@ export interface Budget {
 
 export function computeBudget(input: BudgetInput): Budget {
   const rawEpp = input.aetherCost * EPP_PER_AETHER;
-  const spentOnAbility = passiveCost(input.passiveId ?? 'none') + (input.extraAbilityEpp ?? 0);
+  const spentOnAbility =
+    passiveCost(input.passiveId ?? 'none') +
+    statusCost(input.onHitStatus ?? 'None') +
+    deathEffectCost(input.deathEffect ?? 'None', input.deathEffectCount ?? 0) +
+    (input.extraAbilityEpp ?? 0);
   // A mechanic can never eat the entire budget — a card with no stats is not a
   // card. Anything asking for more than 60% is clamped and shows as over budget.
   const adjustedEpp = Math.max(rawEpp * 0.4, rawEpp - spentOnAbility);
@@ -593,6 +676,9 @@ export function budgetInputFor(card: CardDefinition, passiveId?: string): Budget
     isHero: card.isHero,
     lifetimeSeconds: card.lifetimeSeconds,
     passiveId: passiveId ?? card.passiveId,
+    onHitStatus: card.onHitStatus,
+    deathEffect: card.deathEffect,
+    deathEffectCount: card.deathEffectCount,
   };
 }
 
