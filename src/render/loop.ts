@@ -26,6 +26,7 @@ import {
   FIELD_HEIGHT,
 } from './camera';
 import { warmSprites, warmAtlases } from './sprites';
+import { warmEffects } from './effectSprites';
 import { VfxSystem } from './vfx';
 import { tryGetCard } from '@cards/registry';
 import type { CardDefinition } from '@cards/schema';
@@ -135,6 +136,7 @@ export class BattleRenderer {
     const warm = BattleRenderer.warmSet(this.runner.state);
     warmAtlases(warm);
     warmSprites(warm);
+    warmEffects();
 
     this.running = true;
     this.lastTimestamp = 0;

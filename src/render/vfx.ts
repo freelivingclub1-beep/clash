@@ -21,10 +21,38 @@ import type { SimEvent, Team } from '@sim/types';
 import { TILE_W, TILE_H, tileToLogical } from './camera';
 import { tryGetCard } from '@cards/registry';
 import { type Element, ELEMENT_LOOKS, elementOf } from './elements';
+import {
+  EFFECT_FRAMES,
+  drawEffectFrame,
+  effectSheet,
+  type EffectName,
+} from './effectSprites';
 
 const MAX_PARTICLES = 600;
 const MAX_NUMBERS = 60;
 const MAX_BOLTS = 40;
+const MAX_SPRITES = 48;
+
+/**
+ * The drawn animation each element strikes with.
+ *
+ * Chosen by what the effect actually looks like rather than by its name in the
+ * pack: `sunburn` is a rolling orange bloom and makes a far better fire hit
+ * than the file called `fire`, which is a steady torch flame built to loop.
+ * `spin` marks the ones whose art has no fixed up — giving those a random
+ * rotation stops repeated hits from stamping an identical shape.
+ */
+const ELEMENT_EFFECTS: Record<Element, { name: EffectName; size: number; life: number; spin?: boolean }> = {
+  fire: { name: 'sunburn', size: 62, life: 480 },
+  frost: { name: 'freezing', size: 66, life: 560 },
+  toxic: { name: 'felspell', size: 60, life: 620, spin: true },
+  storm: { name: 'magickahit', size: 58, life: 380, spin: true },
+  water: { name: 'magicbubbles', size: 60, life: 620 },
+  arcane: { name: 'magicspell', size: 58, life: 560, spin: true },
+  holy: { name: 'nebula', size: 64, life: 520 },
+  shadow: { name: 'midnight', size: 62, life: 560, spin: true },
+  steel: { name: 'weaponhit', size: 46, life: 300, spin: true },
+};
 
 type ParticleShape =
   | 'spark'
@@ -228,6 +256,43 @@ function blankParticle(): Particle {
   };
 }
 
+/**
+ * A hand-drawn animation playing at a point.
+ *
+ * Kept separate from particles because it is not one: a particle is a moving
+ * dot with a colour, and this is a fixed strip of authored frames. Sharing the
+ * pool would mean a single spell's worth of sparks could evict the drawn
+ * effect that is the whole reason the spell reads as a spell.
+ */
+interface EffectSprite {
+  active: boolean;
+  name: EffectName;
+  x: number;
+  y: number;
+  size: number;
+  life: number;
+  maxLife: number;
+  rotation: number;
+  /** Fades out over the tail of its life rather than cutting. */
+  fade: boolean;
+  additive: boolean;
+}
+
+function blankSprite(): EffectSprite {
+  return {
+    active: false,
+    name: 'weaponhit',
+    x: 0,
+    y: 0,
+    size: 48,
+    life: 0,
+    maxLife: 1,
+    rotation: 0,
+    fade: true,
+    additive: true,
+  };
+}
+
 function blankBolt(): Bolt {
   return { active: false, x1: 0, y1: 0, x2: 0, y2: 0, jag: [], life: 0, maxLife: 1, colour: '#fff', width: 2 };
 }
@@ -240,9 +305,11 @@ export class VfxSystem {
   private readonly particles: Particle[] = Array.from({ length: MAX_PARTICLES }, blankParticle);
   private readonly numbers: DamageNumber[] = Array.from({ length: MAX_NUMBERS }, blankNumber);
   private readonly bolts: Bolt[] = Array.from({ length: MAX_BOLTS }, blankBolt);
+  private readonly sprites: EffectSprite[] = Array.from({ length: MAX_SPRITES }, blankSprite);
   private particleCursor = 0;
   private numberCursor = 0;
   private boltCursor = 0;
+  private spriteCursor = 0;
 
   /** Current shake magnitude in logical pixels; decays every frame. */
   private shake = 0;
@@ -264,6 +331,12 @@ export class VfxSystem {
     const bolt = this.bolts[this.boltCursor];
     this.boltCursor = (this.boltCursor + 1) % MAX_BOLTS;
     return bolt;
+  }
+
+  private nextSprite(): EffectSprite {
+    const sprite = this.sprites[this.spriteCursor];
+    this.spriteCursor = (this.spriteCursor + 1) % MAX_SPRITES;
+    return sprite;
   }
 
   private nextNumber(): DamageNumber {
@@ -318,6 +391,33 @@ export class VfxSystem {
       particle.gravity = opts.gravity ?? 0.012;
       particle.additive = opts.additive ?? ADDITIVE_BY_DEFAULT.has(particle.shape);
     }
+  }
+
+  /**
+   * Play a drawn animation at a point.
+   *
+   * `life` is the whole play-through, so the frame rate follows the duration
+   * rather than the wall clock — a lingering effect plays slowly and a quick
+   * one snaps, out of the same sixteen frames.
+   */
+  playEffect(
+    name: EffectName,
+    x: number,
+    y: number,
+    size: number,
+    opts: { life?: number; rotation?: number; fade?: boolean; additive?: boolean } = {},
+  ): void {
+    const sprite = this.nextSprite();
+    sprite.active = true;
+    sprite.name = name;
+    sprite.x = x;
+    sprite.y = y;
+    sprite.size = size;
+    sprite.maxLife = opts.life ?? 520;
+    sprite.life = sprite.maxLife;
+    sprite.rotation = opts.rotation ?? 0;
+    sprite.fade = opts.fade ?? true;
+    sprite.additive = opts.additive ?? true;
   }
 
   ring(x: number, y: number, colour: string, size = 26, life = 320, additive = true): void {
@@ -405,6 +505,20 @@ export class VfxSystem {
   private elementalImpact(el: Element, x: number, y: number, power: number): void {
     const look = ELEMENT_LOOKS[el];
     const n = (base: number): number => Math.max(2, Math.round(base * power));
+
+    /*
+     * The drawn animation goes on first, at the point of contact.
+     *
+     * It is the part with a shape — a rim, a rune, a tongue of flame — and the
+     * particles below spread out around it. Rotating it by the element's own
+     * hash-free constant would look mechanical, so effects that read as
+     * radial (blasts, rings) are left upright and only the swirls turn.
+     */
+    const drawn = ELEMENT_EFFECTS[el];
+    this.playEffect(drawn.name, x, y, drawn.size * (0.7 + power * 0.55), {
+      life: Math.round(drawn.life * (0.8 + power * 0.3)),
+      rotation: drawn.spin ? this.random() * Math.PI * 2 : 0,
+    });
 
     // Bigger effects also last longer, so a spell reads as an event rather
     // than as a large flicker.
@@ -575,6 +689,9 @@ export class VfxSystem {
             size: 4,
             life: 520,
           });
+          // A body leaving the board is a moment worth drawing: the spirit
+          // wisp plays over the dust so a death reads even in a scrum.
+          this.playEffect('phantom', at.x, at.y - TILE_H * 0.5, 52, { life: 560 });
           break;
         }
 
@@ -589,6 +706,16 @@ export class VfxSystem {
           const el = card ? elementOf(card) : 'fire';
           const look = ELEMENT_LOOKS[el];
           this.elementalImpact(el, at.x, at.y, 2.4);
+          /*
+           * A second, much larger drawn animation scaled to the spell's real
+           * radius. The impact effect is sized for a blow landing; a spell
+           * covers tiles, and without something at that scale a five-aether
+           * cast looked exactly like a sword hit with more sparks.
+           */
+          this.playEffect(ELEMENT_EFFECTS[el].name, at.x, at.y, radius * TILE_W * 2.1, {
+            life: 700,
+            rotation: this.random() * Math.PI * 2,
+          });
           // Plus a ring at the spell's own radius, so its footprint is exact.
           this.ring(at.x, at.y, look.body, radius * TILE_W, 480);
           this.addShake(5);
@@ -597,6 +724,10 @@ export class VfxSystem {
 
         case 'ability': {
           const at = tileToLogical(fxToFloat(event.x), fxToFloat(event.y), viewTeam);
+          // A hero ability is a cast, and there is a drawn cast animation for
+          // exactly this — a rune circle that opens and closes on the ground.
+          this.playEffect('casting', at.x, at.y, 108, { life: 760 });
+          this.playEffect('protectioncircle', at.x, at.y, 84, { life: 900 });
           this.burst(at.x, at.y, 24, '#ffd84a', { speed: 3.6, size: 3, life: 560 });
           this.ring(at.x, at.y, 'rgba(255,216,74,0.95)', 60, 520);
           this.addShake(4);
@@ -608,6 +739,8 @@ export class VfxSystem {
           const at = tileToLogical(9, event.team === 0 ? 6 : 26, viewTeam);
           this.burst(at.x, at.y, 60, '#ffb04a', { speed: 6, size: 6, life: 900, shape: 'shard' });
           this.burst(at.x, at.y, 40, '#8a8f9a', { speed: 4, size: 5, life: 1100, shape: 'puff' });
+          this.playEffect('sunburn', at.x, at.y, 190, { life: 900 });
+          this.playEffect('vortex', at.x, at.y, 150, { life: 1100, rotation: this.random() * 6.28 });
           this.ring(at.x, at.y, 'rgba(255,176,74,0.95)', 120, 700);
           this.addShake(14);
           break;
@@ -630,6 +763,7 @@ export class VfxSystem {
           const at = tileToLogical(fxToFloat(event.x), fxToFloat(event.y), viewTeam);
           this.burst(at.x, at.y, 22, '#7a5c3a', { speed: 3.4, size: 4, life: 520, shape: 'puff' });
           this.burst(at.x, at.y, 10, '#4a3822', { speed: 2.2, size: 3, life: 620, shape: 'shard', gravity: 0.05 });
+          this.playEffect('vortex', at.x, at.y, 78, { life: 520, rotation: this.random() * 6.28 });
           this.ring(at.x, at.y, 'rgba(140,110,70,0.9)', 30, 380);
           this.addShake(3);
           break;
@@ -683,6 +817,7 @@ export class VfxSystem {
             life: 300,
             gravity: 0.05,
           });
+          this.playEffect('weaponhit', at.x, at.y - TILE_H * 0.6, 44, { life: 260 });
           this.ring(at.x, at.y - TILE_H * 0.6, 'rgba(200,228,255,0.9)', 22, 200);
           break;
         }
@@ -700,6 +835,9 @@ export class VfxSystem {
   /** Deploy confirmation ring, emitted by the battle screen on a drop. */
   deployBurst(tileX: number, tileY: number, colour: string, viewTeam: Team): void {
     const at = tileToLogical(tileX + 0.5, tileY + 0.5, viewTeam);
+    // A summoning circle where the card lands, so a drop is an event on the
+    // board rather than a unit appearing out of nothing.
+    this.playEffect('loading', at.x, at.y, 76, { life: 620 });
     this.ring(at.x, at.y, colour, 40, 420);
     this.burst(at.x, at.y, 12, colour, { speed: 2, size: 3, gravity: -0.004 });
   }
@@ -726,6 +864,12 @@ export class VfxSystem {
       particle.x += particle.vx * (dt / 16.67);
       particle.y += particle.vy * (dt / 16.67);
       particle.vy += particle.gravity * dt;
+    }
+
+    for (const sprite of this.sprites) {
+      if (!sprite.active) continue;
+      sprite.life -= dt;
+      if (sprite.life <= 0) sprite.active = false;
     }
 
     for (const number of this.numbers) {
@@ -803,6 +947,31 @@ export class VfxSystem {
         this.drawParticle(ctx, particle, t);
       }
     }
+
+    /*
+     * The drawn animations last, over every particle.
+     *
+     * They carry the shape of the effect, so anything the particles throw in
+     * front of them would read as the effect being *behind* smoke. Additive
+     * for the same reason the particles are: these frames are lit, and stacking
+     * them over a plume should brighten it rather than paste a rectangle of
+     * art on top of it.
+     */
+    ctx.globalCompositeOperation = 'lighter';
+    for (const sprite of this.sprites) {
+      if (!sprite.active) continue;
+      const sheet = effectSheet(sprite.name);
+      if (!sheet) continue;
+      const t = 1 - sprite.life / sprite.maxLife;
+      const frame = Math.min(EFFECT_FRAMES - 1, Math.floor(t * EFFECT_FRAMES));
+      // Fade over the last third only, so the animation gets to play at full
+      // strength and then leaves, rather than dimming from the first frame.
+      ctx.globalAlpha = sprite.fade ? Math.max(0, Math.min(1, (1 - t) * 3)) : 1;
+      if (!sprite.additive) ctx.globalCompositeOperation = 'source-over';
+      drawEffectFrame(ctx, sheet, frame, sprite.x, sprite.y, sprite.size, sprite.rotation);
+      if (!sprite.additive) ctx.globalCompositeOperation = 'lighter';
+    }
+
     ctx.restore();
     ctx.globalAlpha = 1;
   }

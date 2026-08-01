@@ -14,7 +14,9 @@
     "build:standalone": "node scripts/build-standalone.mjs",
     "balance": "vite-node scripts/balance-report.ts",
     "assets:fetch": "node scripts/lpc/fetch.mjs",
-    "assets:characters": "vite-node scripts/lpc/build.ts"
+    "assets:characters": "vite-node scripts/lpc/build.ts",
+    "assets:fx-fetch": "node scripts/fx/fetch.mjs",
+    "assets:effects": "node scripts/fx/build.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",
