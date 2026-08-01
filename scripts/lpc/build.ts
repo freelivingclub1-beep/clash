@@ -25,8 +25,19 @@ import { readSheet, listEntries, composeAtlas, encode, type Layer } from './comp
 const SRC = process.env.LPC_DIR ?? '/tmp/lpc/lpc-runtime-zips/zips';
 const OUT = 'src/assets/characters';
 
-const WALK_FRAMES = 9;
-const STRIKE_FRAMES = 6;
+/*
+ * Fewer frames than LPC ships.
+ *
+ * The walk cycle is nine frames and the slash six; taking every other walk
+ * frame and two thirds of the slash costs very little, because the renderer
+ * samples the phase continuously and interpolates position between ticks
+ * anyway. It costs a third of the payload, which is the difference between a
+ * build that can be published and one that cannot.
+ */
+const WALK_FRAMES = 6;
+const STRIKE_FRAMES = 4;
+const WALK_STRIDE = 9 / WALK_FRAMES;
+const STRIKE_STRIDE = 6 / STRIKE_FRAMES;
 
 // --- recipe --------------------------------------------------------------
 
@@ -256,6 +267,8 @@ function build(): void {
         walkFrames: WALK_FRAMES,
         strikeFrames: STRIKE_FRAMES,
         strikeAnim: 'slash',
+        walkStride: WALK_STRIDE,
+        strikeStride: STRIKE_STRIDE,
       });
       const file = `${card.modelId}_${team}.png`;
       writeFileSync(`${OUT}/${file}`, encode(atlas));

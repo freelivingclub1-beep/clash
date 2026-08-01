@@ -78,7 +78,7 @@ function over(dst, src, dx, dy, sx, sy, w, h) {
  * Keeping both facings in one image means the renderer picks a row by team and
  * a column by animation phase, with no second texture to manage.
  */
-export function composeAtlas({ layers, walkFrames, strikeFrames, strikeAnim }) {
+export function composeAtlas({ layers, walkFrames, strikeFrames, strikeAnim, walkStride = 1, strikeStride = 1 }) {
   const cols = walkFrames + strikeFrames;
   const out = new PNG({ width: cols * FRAME, height: 2 * FRAME, filterType: -1 });
   out.data.fill(0);
@@ -91,19 +91,23 @@ export function composeAtlas({ layers, walkFrames, strikeFrames, strikeAnim }) {
       const walk = layer.walk;
       if (walk) {
         for (let f = 0; f < walkFrames; f++) {
-          over(out, walk, f * FRAME, r * FRAME, f * FRAME, srcRow * FRAME, FRAME, FRAME);
+          // Sample across the source cycle rather than taking the first N,
+          // which would be the first half of a stride and read as a limp.
+          const src = Math.min(Math.round(f * walkStride), Math.floor(walk.width / FRAME) - 1);
+          over(out, walk, f * FRAME, r * FRAME, src * FRAME, srcRow * FRAME, FRAME, FRAME);
         }
       }
       // Strike block, appended after the walk frames.
       const strike = layer[strikeAnim];
       if (strike) {
         for (let f = 0; f < strikeFrames; f++) {
+          const src = Math.min(Math.round(f * strikeStride), Math.floor(strike.width / FRAME) - 1);
           over(
             out,
             strike,
             (walkFrames + f) * FRAME,
             r * FRAME,
-            f * FRAME,
+            src * FRAME,
             srcRow * FRAME,
             FRAME,
             FRAME,

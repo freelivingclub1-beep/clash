@@ -22,7 +22,7 @@ import { DAMAGE_RAMP_STACK_CAP, PROJECTILE_SPEED, TICK_HZ } from '@sim/constants
 import type { Entity, MatchState, Team } from '@sim/types';
 import type { MatchRunner } from '@game/match';
 import { TILE_W, TILE_H, tileToLogical } from './camera';
-import { modelFor, spriteFor } from './sprites';
+import { blitSprite, modelFor, spriteFor } from './sprites';
 import { type Element, ELEMENT_LOOKS, elementOf } from './elements';
 import { texturePattern } from './textures';
 
@@ -142,28 +142,14 @@ function drawTroop(
   const lungeX = (fxToFloat(entity.faceX) / facingLength) * lungeStrength * radius * 0.45;
   const lungeY = (fxToFloat(entity.faceY) / facingLength) * lungeStrength * radius * 0.25;
 
-  if (sprite.sx !== undefined && sprite.sy !== undefined) {
-    // Atlas frame: blit one cell out of the strip.
-    ctx.drawImage(
-      sprite.source,
-      sprite.sx,
-      sprite.sy,
-      sprite.width,
-      sprite.height,
-      screenX - drawWidth / 2 + lungeX,
-      footY - drawHeight - lungeY,
-      drawWidth,
-      drawHeight,
-    );
-  } else {
-    ctx.drawImage(
-      sprite.source,
-      screenX - drawWidth / 2 + lungeX,
-      footY - drawHeight - lungeY,
-      drawWidth,
-      drawHeight,
-    );
-  }
+  blitSprite(
+    ctx,
+    sprite,
+    screenX - drawWidth / 2 + lungeX,
+    footY - drawHeight - lungeY,
+    drawWidth,
+    drawHeight,
+  );
 
   ctx.globalAlpha = 1;
 
@@ -290,7 +276,7 @@ function drawBuilding(
   ctx.fillRect(screenX - size * 0.42, screenY, size * 0.84, 3);
 
   const sprite = spriteFor(card, entity.team, 0);
-  ctx.drawImage(sprite.source, screenX - size / 2, screenY - size, size, size);
+  blitSprite(ctx, sprite, screenX - size / 2, screenY - size, size, size);
 
   healthBar(ctx, screenX, screenY - size - 20, size * 1.1, entity.hp / entity.maxHp, entity.team);
 

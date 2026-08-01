@@ -1,6 +1,6 @@
 {
- "walkFrames": 9,
- "strikeFrames": 6,
+ "walkFrames": 6,
+ "strikeFrames": 4,
  "files": {
   "barbedFence|0": "barbedFence_0.png",
   "barbedFence|1": "barbedFence_1.png",

@@ -1182,6 +1182,29 @@ function externalImage(card: CardDefinition): HTMLImageElement | null {
   return null;
 }
 
+/**
+ * Draw a sprite, whether it is a standalone bitmap or one cell of an atlas.
+ *
+ * Every caller must go through this. Three places draw sprites and only one of
+ * them was updated when atlases arrived, so buildings and the placement ghost
+ * blitted the *entire* strip squashed into a unit-sized box — a rainbow smear
+ * where a figure should be.
+ */
+export function blitSprite(
+  ctx: CanvasRenderingContext2D,
+  sprite: DrawnSprite,
+  dx: number,
+  dy: number,
+  dw: number,
+  dh: number,
+): void {
+  if (sprite.sx !== undefined && sprite.sy !== undefined) {
+    ctx.drawImage(sprite.source, sprite.sx, sprite.sy, sprite.width, sprite.height, dx, dy, dw, dh);
+  } else {
+    ctx.drawImage(sprite.source, dx, dy, dw, dh);
+  }
+}
+
 export interface DrawnSprite {
   source: CanvasImageSource;
   width: number;
@@ -1224,7 +1247,7 @@ interface AtlasMeta {
   strikeFrames: number;
 }
 
-const ATLAS_META: AtlasMeta = { walkFrames: 9, strikeFrames: 6 };
+const ATLAS_META: AtlasMeta = { walkFrames: 6, strikeFrames: 4 };
 export const ATLAS_FRAME = 64;
 
 const atlasByKey = new Map<string, string>();

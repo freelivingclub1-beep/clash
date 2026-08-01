@@ -32,7 +32,7 @@ import {
   tileToLogical,
 } from './camera';
 import { texturePattern } from './textures';
-import { spriteFor } from './sprites';
+import { blitSprite, spriteFor } from './sprites';
 import { tryGetCard } from '@cards/registry';
 import { formationOffsets } from '@sim/entities';
 import { fxToFloat } from '@sim/math/fixed';
@@ -421,7 +421,7 @@ export function drawPlacementGhost(
     ctx.ellipse(at.x, at.y, radius * 0.8, radius * 0.4, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.drawImage(sprite.source, at.x - drawWidth / 2, at.y - lift - drawHeight, drawWidth, drawHeight);
+    blitSprite(ctx, sprite, at.x - drawWidth / 2, at.y - lift - drawHeight, drawWidth, drawHeight);
   }
 
   ctx.restore();

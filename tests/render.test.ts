@@ -27,6 +27,15 @@ vi.mock('@render/sprites', async () => {
   const models = await import('@render/models');
   return {
     spriteFor: () => ({ source: {} as CanvasImageSource, width: 64, height: 96 }),
+    // Every draw site goes through this now, so the mock has to offer it.
+    blitSprite: (
+      ctx: CanvasRenderingContext2D,
+      _sprite: unknown,
+      dx: number,
+      dy: number,
+      dw: number,
+      dh: number,
+    ) => ctx.drawImage({} as CanvasImageSource, dx, dy, dw, dh),
     modelFor: (card: { modelId: string }) =>
       models.modelSpec(card.modelId, { body: 'humanoid', head: 'none', weapon: 'none', accessory: 'none', scale: 1, build: 'normal', trim: 'sash' }),
   };
