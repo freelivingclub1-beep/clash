@@ -23,6 +23,12 @@ import type { Entity, MatchState, Team } from '@sim/types';
 import type { MatchRunner } from '@game/match';
 import { TILE_W, TILE_H, tileToLogical } from './camera';
 import { blitFigure, modelFor, spriteFor } from './sprites';
+import {
+  EFFECT_FRAMES,
+  drawEffectFrame,
+  effectSheet,
+  type EffectName,
+} from './effectSprites';
 import { type Element, ELEMENT_LOOKS, elementOf } from './elements';
 import { texturePattern } from './textures';
 
@@ -33,6 +39,39 @@ const TEAM_COLOURS: Record<Team, { primary: string; dark: string }> = {
   0: { primary: '#4a9eff', dark: '#1b4f8a' },
   1: { primary: '#ff6b5b', dark: '#8a2f24' },
 };
+
+/**
+ * Frame index for an effect looping continuously, from the animation clock.
+ *
+ * Status tells used to be flat rectangles of translucent colour laid over the
+ * figure — a blue wash for frozen, a green one for poisoned. They said the
+ * right thing and looked like nothing, which is the complaint that started
+ * this work. A looping animation says the same thing and looks authored.
+ */
+function loopFrame(tick: number, cyclesPerSecond: number): number {
+  const phase = ((tick / TICK_HZ) * cyclesPerSecond) % 1;
+  return Math.floor(((phase + 1) % 1) * EFFECT_FRAMES);
+}
+
+/** Play one frame of a looping effect over a point, additively. */
+function overlay(
+  ctx: CanvasRenderingContext2D,
+  name: EffectName,
+  x: number,
+  y: number,
+  size: number,
+  tick: number,
+  opts: { rate?: number; alpha?: number } = {},
+): boolean {
+  const sheet = effectSheet(name);
+  if (!sheet) return false;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = opts.alpha ?? 0.85;
+  drawEffectFrame(ctx, sheet, loopFrame(tick, opts.rate ?? 1.4), x, y, size);
+  ctx.restore();
+  return true;
+}
 
 /**
  * The coloured disc a unit stands on.
@@ -199,11 +238,13 @@ function drawTroop(
 
   // Evolved units get a bright halo — the clearest tell available in a fight.
   if (entity.evolved) {
-    ctx.strokeStyle = '#ffd84a';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.ellipse(screenX, screenY, radius * 1.15, radius * 0.6, 0, 0, Math.PI * 2);
-    ctx.stroke();
+    if (!overlay(ctx, 'protectioncircle', screenX, screenY, drawHeight * 0.95, tick, { rate: 0.8, alpha: 0.8 })) {
+      ctx.strokeStyle = '#ffd84a';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.ellipse(screenX, screenY, radius * 1.15, radius * 0.6, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
   }
 
   /*
@@ -255,21 +296,41 @@ function drawTroop(
     }
   }
 
-  // Status tells, drawn over the figure so they are never hidden by it.
+  /*
+   * Status tells, drawn over the figure so they are never hidden by it.
+   *
+   * Each is a real animation now. The flat translucent rectangles they replace
+   * were legible and completely inert — a frozen unit and a poisoned one
+   * differed by a hue and nothing else, and neither looked like anything was
+   * happening to them. The fills stay as the fallback for the moment before an
+   * effect sheet has decoded, so a status is never invisible.
+   */
+  const midY = footY - drawHeight * 0.5;
   if (entity.freezeTicks > 0 || entity.stunTicks > 0) {
-    ctx.fillStyle = 'rgba(140,220,255,0.35)';
-    ctx.fillRect(screenX - drawWidth / 2, topY, drawWidth, drawHeight);
+    if (!overlay(ctx, 'freezing', screenX, midY, drawHeight * 1.15, tick, { rate: 1.1, alpha: 0.7 })) {
+      ctx.fillStyle = 'rgba(140,220,255,0.35)';
+      ctx.fillRect(screenX - drawWidth / 2, topY, drawWidth, drawHeight);
+    }
   }
   if (entity.rageTicks > 0) {
-    ctx.strokeStyle = 'rgba(224,91,213,0.9)';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.ellipse(screenX, screenY, radius * 1.3, radius * 0.7, 0, 0, Math.PI * 2);
-    ctx.stroke();
+    if (!overlay(ctx, 'magic8', screenX, midY, drawHeight * 1.2, tick, { rate: 2.0, alpha: 0.75 })) {
+      ctx.strokeStyle = 'rgba(224,91,213,0.9)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.ellipse(screenX, screenY, radius * 1.3, radius * 0.7, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
   }
   if (entity.poisonTicks > 0) {
-    ctx.fillStyle = 'rgba(120,200,90,0.28)';
-    ctx.fillRect(screenX - drawWidth / 2, topY, drawWidth, drawHeight);
+    if (!overlay(ctx, 'felspell', screenX, midY, drawHeight * 1.05, tick, { rate: 0.9, alpha: 0.6 })) {
+      ctx.fillStyle = 'rgba(120,200,90,0.28)';
+      ctx.fillRect(screenX - drawWidth / 2, topY, drawWidth, drawHeight);
+    }
+  }
+  // A charge is a threat you are meant to see coming, so it burns at the feet
+  // rather than over the body — visible even when the figure is in a scrum.
+  if (entity.charging) {
+    overlay(ctx, 'firespin', screenX, screenY, drawHeight * 0.85, tick, { rate: 2.6, alpha: 0.8 });
   }
 
   // Ramp tell. A unit whose damage or rate of fire is multiplying has to show
@@ -719,6 +780,7 @@ function drawProjectile(
   screenX: number,
   screenY: number,
   viewTeam: Team,
+  tick: number,
 ): void {
   const card = tryGetCard(entity.cardId);
   const look = shotLookFor(card);
@@ -811,9 +873,56 @@ function drawProjectile(
    */
   drawShotAura(ctx, el, glow, scale, progress);
 
+  /*
+   * And a drawn animation on top of the shot itself.
+   *
+   * The envelope below is procedural — tongues of flame, shards, droplets —
+   * and it does the streaming and the physics well. What it cannot do is have
+   * the *shape* of fire. A hand-drawn loop riding on the shot is the
+   * difference between a coloured dot with a tail and something a person drew,
+   * and it is the part of "everyone just shoots a simple projectile" that the
+   * procedural work could never answer.
+   *
+   * Drawn unrotated, in the shot's own space, because the pack's effects are
+   * authored upright and spinning them with a flat shot makes fire flow
+   * sideways. A lobbed shot already tumbles, and the effect tumbles with it,
+   * which reads correctly for something arcing through the air.
+   */
+  const inFlight = SHOT_EFFECTS[el];
+  if (inFlight) {
+    const sheet = effectSheet(inFlight);
+    if (sheet) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = 0.9;
+      if (!lobbed) ctx.rotate(-heading);
+      drawEffectFrame(ctx, sheet, loopFrame(tick, 3.2), 0, 0, 34 * scale);
+      ctx.restore();
+    }
+  }
+
   drawShotBody(ctx, look, tint, scale);
   ctx.restore();
 }
+
+/**
+ * The drawn loop that rides on a shot in flight, by element.
+ *
+ * Only the elements whose shots are *made* of something get one. A steel bolt
+ * or an arrow is a physical object and putting a magical loop on it would make
+ * every projectile in the game look enchanted, which is exactly the flattening
+ * this is meant to undo.
+ */
+const SHOT_EFFECTS: Partial<Record<Element, EffectName>> = {
+  fire: 'brightfire',
+  frost: 'bluefire',
+  toxic: 'felspell',
+  storm: 'magickahit',
+  water: 'magicbubbles',
+  arcane: 'magicspell',
+  holy: 'sunburn',
+  shadow: 'phantom',
+};
 
 /**
  * The elemental envelope around a shot in flight.
@@ -986,7 +1095,7 @@ export function drawEntities(
         drawBuilding(ctx, entity, screenX, screenY);
         break;
       case 'projectile':
-        drawProjectile(ctx, entity, screenX, screenY, viewTeam);
+        drawProjectile(ctx, entity, screenX, screenY, viewTeam, animTick);
         break;
       default:
         drawTroop(ctx, entity, screenX, screenY, animTick);
