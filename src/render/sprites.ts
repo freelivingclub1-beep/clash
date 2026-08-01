@@ -1461,10 +1461,25 @@ export interface AtlasPortrait {
 }
 
 export function atlasPortrait(card: CardDefinition): AtlasPortrait | null {
-  const url = atlasByKey.get(card.modelId);
+  return atlasPortraitFor(card.modelId);
+}
+
+/**
+ * The same crop, addressed by model rather than by card.
+ *
+ * The Card Maker needs to show what a figure looks like before any card is
+ * wearing it — you cannot pick an appearance from a list of names.
+ */
+export function atlasPortraitFor(modelId: string): AtlasPortrait | null {
+  const url = atlasByKey.get(modelId);
   if (!url) return null;
   const cols = ATLAS_META.walkFrames + ATLAS_META.strikeFrames;
   return { url, size: `${cols * 100}% 200%`, position: '0% 100%' };
+}
+
+/** Every model the build produced art for, for the Card Maker's picker. */
+export function drawableModelIds(): string[] {
+  return [...atlasByKey.keys()].sort();
 }
 
 const portraitCache = new Map<string, string>();

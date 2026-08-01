@@ -28,11 +28,92 @@ import {
   validateCard,
 } from '@cards/schema';
 import { registerCardFromJson } from '@cards/registry';
-import { auditCard, PASSIVE_EPP_COST } from '@cards/balance';
+import {
+  auditCard,
+  DEATH_EFFECT_EPP_COST,
+  PASSIVE_EPP_COST,
+  STATUS_EPP_COST,
+} from '@cards/balance';
+import { MODELS } from '@render/models';
+import { atlasPortraitFor, drawableModelIds } from '@render/sprites';
 import { registeredPassives } from '@sim/scripts/passives';
 import { derivedStats, MAX_LEVEL, BASELINE_LEVEL } from '@cards/scaling';
 import { registeredEvolutionScripts } from '@sim/scripts/evolutions';
 import { CardFace } from '../CardFace';
+
+/**
+ * Pick the figure a card puts on the board.
+ *
+ * The single biggest thing the studio was missing. Every field here bound to a
+ * stat and none to an appearance, so `modelId` was left empty on everything a
+ * player made — and an empty model falls through to the crude procedural
+ * figure the rest of the roster stopped using. A card you designed looked
+ * nothing like a card that shipped.
+ *
+ * The list is the models the art build actually produced, so what you pick is
+ * what you get. It borrows an existing figure rather than composing a new one
+ * because the character art is built ahead of time from layered source
+ * material that is not in the bundle — there is nothing at runtime to compose
+ * from, and offering a builder that silently produced the fallback would be
+ * the same disappointment wearing more controls.
+ */
+function FigurePicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (id: string) => void;
+}) {
+  const [filter, setFilter] = useState('');
+  const ids = useMemo(() => drawableModelIds(), []);
+  const shown = useMemo(() => {
+    const needle = filter.trim().toLowerCase();
+    return ids.filter((id) => {
+      if (!needle) return true;
+      const spec = MODELS[id];
+      const haystack = `${id} ${spec?.body ?? ''} ${spec?.build ?? ''} ${spec?.weapon ?? ''}`;
+      return haystack.toLowerCase().includes(needle);
+    });
+  }, [ids, filter]);
+
+  return (
+    <Field label={`Figure (${shown.length} of ${ids.length})`}>
+      <input
+        type="text"
+        placeholder="filter by name, body plan, build or weapon…"
+        value={filter}
+        onChange={(e) => setFilter(e.target.value)}
+      />
+      <div className="figure-grid">
+        {shown.map((id) => {
+          const art = atlasPortraitFor(id);
+          const spec = MODELS[id];
+          return (
+            <button
+              type="button"
+              key={id}
+              className={`figure-tile${id === value ? ' selected' : ''}`}
+              onClick={() => onChange(id)}
+              title={spec ? `${id} — ${spec.body}, ${spec.build}, ${spec.weapon}` : id}
+            >
+              {art && (
+                <span
+                  className="figure-art"
+                  style={{
+                    backgroundImage: `url(${art.url})`,
+                    backgroundSize: art.size,
+                    backgroundPosition: art.position,
+                  }}
+                />
+              )}
+              <span className="figure-name">{id}</span>
+            </button>
+          );
+        })}
+      </div>
+    </Field>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Field primitives
@@ -333,6 +414,9 @@ export function CardMaker({ onBack }: { onBack: () => void }) {
 
         {/* --- B ------------------------------------------------------------ */}
         <Section title="B · Assets & Render">
+          {draft.category !== 'Spell' && (
+            <FigurePicker value={draft.modelId} onChange={(v) => update('modelId', v)} />
+          )}
           <TextInput
             label="Mesh / Sprite Sheet Key"
             value={draft.spriteKey}
@@ -502,6 +586,17 @@ export function CardMaker({ onBack }: { onBack: () => void }) {
               onChange={(v) => update('splashRadius', v)}
               format={(v) => `${v.toFixed(1)} tiles`}
               invalid={issueFor('splashRadius')}
+            />
+          )}
+          {draft.category === 'Spell' && (
+            <SliderInput
+              label="Flight Time — how long the cast takes to land"
+              value={draft.castTravelSeconds}
+              min={0.05}
+              max={2}
+              step={0.05}
+              onChange={(v) => update('castTravelSeconds', v)}
+              format={(v) => `${v.toFixed(2)}s`}
             />
           )}
           <NumberInput
@@ -716,9 +811,39 @@ export function CardMaker({ onBack }: { onBack: () => void }) {
               </div>
               {audit.budget.spentOnAbility > 0 && (
                 <div className="stat-line">
-                  <span className="label">Paid for {draft.passiveId}</span>
+                  <span className="label">Mechanics</span>
                   <span style={{ color: 'var(--danger)' }}>
                     −{audit.budget.spentOnAbility} EPP
+                  </span>
+                </div>
+              )}
+              {/*
+                Itemised, because one lump sum labelled with the passive name
+                was misleading the moment statuses and death effects started
+                costing something: a card could be paying four hundred EPP for
+                a freeze and read as if its passive were expensive.
+              */}
+              {draft.passiveId !== 'none' && PASSIVE_EPP_COST[draft.passiveId] !== undefined && (
+                <div className="stat-line">
+                  <span className="label">· passive · {draft.passiveId}</span>
+                  <span style={{ color: 'var(--danger)' }}>
+                    −{PASSIVE_EPP_COST[draft.passiveId]} EPP
+                  </span>
+                </div>
+              )}
+              {draft.onHitStatus !== 'None' && (
+                <div className="stat-line">
+                  <span className="label">· on hit · {draft.onHitStatus}</span>
+                  <span style={{ color: 'var(--danger)' }}>
+                    −{STATUS_EPP_COST[draft.onHitStatus] ?? 0} EPP
+                  </span>
+                </div>
+              )}
+              {draft.deathEffect !== 'None' && (
+                <div className="stat-line">
+                  <span className="label">· on death · {draft.deathEffect}</span>
+                  <span style={{ color: 'var(--danger)' }}>
+                    −{DEATH_EFFECT_EPP_COST[draft.deathEffect] ?? 0} EPP
                   </span>
                 </div>
               )}

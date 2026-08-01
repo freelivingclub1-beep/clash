@@ -347,6 +347,17 @@ export const PASSIVE_EPP_COST: Record<string, number> = {
    */
   soul_bind: 520,
   /**
+   * Hits three bodies for full damage on one throw.
+   *
+   * Priced above `split_shot`, which strikes one extra, and above
+   * `chain_attack`, which strikes several with falloff — this does neither.
+   * Flat damage across three targets is three times the card's printed output
+   * whenever a crowd obliges, and the audit only ever sees the printed figure.
+   * The three-second reload is what keeps the average honest, and the price is
+   * what stops a card pairing that reload with a large single hit.
+   */
+  boomerang: 400,
+  /**
    * Tops nearby allies up to a small armour layer every few seconds.
    *
    * Dearer than the healing aura because overkill absorption means a point of

@@ -282,6 +282,44 @@ describe('elite hounds', () => {
     return damages;
   };
 
+  it('takes four princess-tower hits to kill, one of them the armour', () => {
+    /*
+     * The pack's whole reason to exist. Armour absorbs one blow of any size,
+     * so the first hit is spent on the plate however hard it lands — and the
+     * body then has to take three more. Three is the number: at two the pack
+     * evaporates before it reaches anything and the card is a donation, and
+     * the plate is doing nothing that raw health would not do cheaper.
+     *
+     * Driven at the real tower's real damage rather than a made-up figure,
+     * because the requirement is expressed in tower hits and a card tuned
+     * against an invented number is tuned against nothing.
+     */
+    const state = newMatch();
+    const pack = play(state, hounds);
+    const hound = pack[0];
+    const towerDamage = getCard('card_towertroop_tower_princess').damage;
+
+    let hits = 0;
+    while (hound.alive && hits < 12) {
+      applyDamage(state, hound, towerDamage);
+      hits++;
+    }
+    expect(hits).toBe(4);
+  });
+
+  it('spends the plate on the first blow however large it is', () => {
+    // The other half of the requirement, and the half a big spell would break
+    // if overkill leaked: a thousand-damage hit must still cost exactly the
+    // armour and leave the dog at full health.
+    const state = newMatch();
+    const hound = play(state, hounds)[0];
+    const full = hound.hp;
+    applyDamage(state, hound, 10_000);
+    expect(hound.shield).toBe(0);
+    expect(hound.hp).toBe(full);
+    expect(hound.alive).toBe(true);
+  });
+
   it('is a registered, priced mechanic', () => {
     expect(hasPassive('damage_ramp')).toBe(true);
     const card = getCard(hounds);

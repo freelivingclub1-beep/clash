@@ -351,6 +351,7 @@ export const MODELS: Record<string, ModelSpec> = {
   pyreMonk: model('hunched', 'wizardHat', 'lantern', 'none', 0.95, 'stout', 'collar'),
   tempestHerald: model('centaur', 'crest', 'staff', 'wings', 1.15, 'broad', 'hem'),
   warchanter: model('swarm', 'mask', 'dagger', 'banner', 0.75, 'tiny', 'shoulders'),
+  boomerangThrower: model('humanoid', 'hood', 'bow', 'backpack', 0.95, 'lean', 'chevron'),
 };
 
 export function modelSpec(modelId: string, fallback: ModelSpec): ModelSpec {

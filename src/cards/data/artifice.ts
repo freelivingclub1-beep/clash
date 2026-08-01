@@ -650,7 +650,52 @@ export const WARCHANTER = defineCard({
   statusDuration: 2.0,
 });
 
+// ---------------------------------------------------------------------------
+// One throw, three bodies
+// ---------------------------------------------------------------------------
+
+/**
+ * 5 aether. Three hundred to three targets, once every three seconds.
+ *
+ * The reload is the card. Three seconds is an age in a lane — a swarm covers a
+ * third of it between throws — so against one body this is the worst attacker
+ * of its cost in the set, and against four it is the best. Nothing else in the
+ * game pays out flat across its targets: chains fall off and split shots take
+ * exactly one extra, so a crowd is worth the same to them as a pair.
+ *
+ * You do not aim it. It takes the nearest bodies in order from wherever it
+ * last clipped one, which means positioning your own push in front of it is a
+ * real mistake.
+ */
+export const BOOMERANG_THROWER = defineCard({
+  name: 'Boomerang Thrower',
+  id: 'card_troop_boomerang_thrower',
+  rarity: 'Epic',
+  category: 'Troop',
+  aetherCost: 5,
+  unlockArena: 9,
+  description: 'One throw, three bodies, three hundred each. Then a long wait.',
+  tint: '#b08a4f',
+  modelId: 'boomerangThrower',
+  baseHealth: 1350,
+  massWeight: 26,
+  speedClass: 'Medium',
+  bodyRadius: 0.46,
+  targetPriority: 'Ground',
+  attackRange: 4.5,
+  sightRange: 6.5,
+  // The whole cost of the mechanic: three seconds out and back.
+  hitSpeed: 3.0,
+  damage: 300,
+  firstAttackDelay: 1.0,
+  usesProjectile: true,
+  passiveId: 'boomerang',
+  // Extra bodies beyond the one it was thrown at — three struck in total.
+  passiveMagnitude: 2,
+});
+
 export const ARTIFICE_CARDS = [
+  BOOMERANG_THROWER,
   FROST_SAGE,
   RIMEBLADE,
   GLACIER_WARDEN,

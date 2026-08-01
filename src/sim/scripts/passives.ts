@@ -1370,6 +1370,68 @@ register('soul_bind', {
   },
 });
 
+/**
+ * Boomerang — one throw, three bodies, and a long wait to catch it.
+ *
+ * Distinct from both of the mechanics it sits between. `chain_attack` arcs
+ * outward from each victim to the next and falls off as it goes;
+ * `split_shot` strikes exactly one extra and only within the card's own
+ * reach. This is a single object on a circuit: it takes the nearest bodies in
+ * order and hits every one of them for the same amount, which makes it the
+ * only attack in the game whose value is flat in the number of targets rather
+ * than decaying across them.
+ *
+ * The reload is where it is paid for. Three seconds is an age — long enough
+ * that a swarm walks a third of a lane between throws, and long enough that
+ * catching a single target with it is a waste of the card. It wants a crowd,
+ * and against one body it is the worst attacker of its cost in the set.
+ *
+ * `magnitude` is the number of *extra* bodies beyond the one it was aimed at.
+ */
+register('boomerang', {
+  onHit: (state, self, victim, magnitude) => {
+    const stats = resolveStats(self.cardId, self.level, self.evolved);
+    const extra = Math.max(0, Math.round(magnitude));
+    if (extra === 0) return;
+
+    /*
+     * Nearest first, measured from the flight so far rather than from the
+     * thrower. A boomerang travels a circuit — taking whatever is closest to
+     * the last thing it clipped is what makes the path read as one object
+     * rather than three simultaneous hits.
+     */
+    const reach = fx(stats.card.attackRange + 2);
+    const struck = new Set<number>([victim.id]);
+    let from = victim;
+
+    for (let i = 0; i < extra; i++) {
+      let nearest: Entity | undefined;
+      let nearestSq = Infinity;
+      for (const other of enemiesInRadius(state, self, reach)) {
+        if (struck.has(other.id) || other.kind === 'tower') continue;
+        const distSq = fxLenSq(other.x - from.x, other.y - from.y);
+        if (distSq >= nearestSq) continue;
+        nearestSq = distSq;
+        nearest = other;
+      }
+      if (!nearest) break;
+
+      struck.add(nearest.id);
+      applyDamage(state, nearest, stats.damage, self, { passives: false });
+      state.events.push({
+        type: 'arc',
+        team: self.team,
+        x: from.x,
+        y: from.y,
+        toX: nearest.x,
+        toY: nearest.y,
+        kind: 'chain',
+      });
+      from = nearest;
+    }
+  },
+});
+
 // ---------------------------------------------------------------------------
 
 export function passiveHooks(passiveId: string): PassiveHooks | undefined {

@@ -115,7 +115,18 @@ export const ELITE_HOUNDS = defineCard({
   description: 'Three armoured hounds. Each bite on the same target hits harder.',
   tint: '#c2a06a',
   modelId: 'eliteHound',
-  baseHealth: 200,
+  /*
+   * Sized against the princess tower, not against a spreadsheet.
+   *
+   * A tower hits for 109, and a hound has to take four of them: the first
+   * spends the plate, whatever its size, and three more spend the dog. That
+   * puts the body between two hits (218) and three (327) — 260 leaves it
+   * standing on 42 after the third blow and dead on the fourth, which is the
+   * whole point of armour on a swarm. It is a full second of tower time per
+   * hound, three seconds for the pack, and the reason the card is a threat
+   * rather than a delivery of free crowns.
+   */
+  baseHealth: 260,
   // One hit of any size, per hound, independently tracked.
   shieldHealth: 40,
   spawnCount: 3,

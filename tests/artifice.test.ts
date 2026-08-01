@@ -48,8 +48,8 @@ function until(state: MatchState, done: () => boolean, seconds = 10): boolean {
 }
 
 describe('the wave itself', () => {
-  it('adds eighteen cards', () => {
-    expect(ARTIFICE_CARDS).toHaveLength(18);
+  it('adds nineteen cards', () => {
+    expect(ARTIFICE_CARDS).toHaveLength(19);
   });
 
   it('gives every card a behaviour beyond plain single-target damage', () => {
@@ -230,6 +230,66 @@ describe('interruption and displacement', () => {
     place(state, 0, 'card_troop_sporeling', 8, 12);
     const victim = place(state, 1, 'card_troop_knight', 8, 13);
     expect(until(state, () => victim.poisonTicks > 0)).toBe(true);
+  });
+});
+
+describe('boomerang', () => {
+  it('strikes three bodies on one throw, all for the same amount', () => {
+    /*
+     * Flat across its targets is the whole point — a chain falls off and a
+     * split shot takes exactly one extra, so a crowd is worth no more to
+     * either than a pair. Asserting equal damage rather than merely "several
+     * were hit" is what separates this from the two mechanics it sits between.
+     */
+    const state = newMatch();
+    place(state, 0, 'card_troop_boomerang_thrower', 8, 12);
+    const victims = [
+      place(state, 1, 'card_troop_giant', 8, 14),
+      place(state, 1, 'card_troop_giant', 8.7, 14.4),
+      place(state, 1, 'card_troop_giant', 9.4, 14.8),
+      place(state, 1, 'card_troop_giant', 10.1, 15.2),
+    ];
+    for (const v of victims) v.freezeTicks = 900;
+
+    expect(until(state, () => victims.filter((v) => v.hp < v.maxHp).length >= 3, 12)).toBe(true);
+    const hurt = victims.filter((v) => v.hp < v.maxHp);
+    // Three, not four: the fourth body is beyond the throw.
+    expect(hurt).toHaveLength(3);
+    const dealt = hurt.map((v) => v.maxHp - v.hp);
+    expect(new Set(dealt).size).toBe(1);
+  });
+
+  it('waits three seconds between throws', () => {
+    const state = newMatch();
+    place(state, 0, 'card_troop_boomerang_thrower', 8, 12);
+    const victim = place(state, 1, 'card_troop_giant', 8, 14);
+    victim.freezeTicks = 900;
+
+    const hits: number[] = [];
+    let last = victim.hp;
+    for (let i = 0; i < 8 * TICK_HZ; i++) {
+      stepMatch(state);
+      if (victim.hp < last) {
+        hits.push(i);
+        last = victim.hp;
+      }
+    }
+    expect(hits.length).toBeGreaterThanOrEqual(2);
+    // A reload measured in seconds, not in the eighth-of-a-second most cards use.
+    expect(hits[1] - hits[0]).toBeGreaterThan(TICK_HZ * 2.5);
+  });
+
+  it('never rebounds onto a tower', () => {
+    // A throw that clipped a tower on the way round would make it a win
+    // condition rather than a crowd answer, and it is priced as the latter.
+    const state = newMatch();
+    place(state, 0, 'card_troop_boomerang_thrower', 8, 22);
+    const victim = place(state, 1, 'card_troop_knight', 8, 24);
+    victim.freezeTicks = 900;
+    const towers = state.entities.filter((e) => e.kind === 'tower' && e.team === 1);
+    const before = towers.map((t) => t.hp);
+    until(state, () => victim.hp < victim.maxHp, 10);
+    expect(towers.map((t) => t.hp)).toEqual(before);
   });
 });
 

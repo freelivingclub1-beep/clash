@@ -70,41 +70,108 @@ const BODY_BY_BUILD: Record<BuildKind, string> = {
  * to make cards distinguishable and that work should not be thrown away.
  */
 /**
- * Species by body plan — at least five each.
+ * Species by body plan.
  *
- * The count is not decoration. A card's figure varies along the species, the
- * body frame, the weapon and the hair; a weaponless card on a plan whose
- * species have no hair varies along *one* axis, so the entire space of
- * distinguishable figures is the length of this list. Three cards on that
- * shape with a three-entry pool is a build failure, and was.
+ * Curated, not padded. An earlier version widened every list to five or six
+ * entries to give the de-duplicator room to work, which it did — and put a
+ * wolf's head on the Valkyrie and the Archer Queen, a sheep's on the Mini
+ * P.E.K.K.A. and a pig's on the Concussion Guard. Variety bought that way is
+ * not variety; it is the plan losing its meaning.
  *
- * The plan still sets the character of the list — a brute reads as heavy
- * whichever of its heads it draws — it just no longer determines the figure.
+ * So each list holds only species that suit the plan, and the room the
+ * de-duplicator needs comes from `TAIL_BY_SPECIES` below instead — an axis
+ * that changes the silhouette without changing what the creature is.
  */
 const HEADS_BY_PLAN: Record<BodyPlan, readonly string[]> = {
-  humanoid: ['human/male', 'orc/male', 'vampire/adult', 'goblin/adult', 'zombie/adult'],
-  brute: ['troll/adult', 'minotaur/male', 'boarman/adult', 'wartotaur/adult', 'orc/male'],
-  golem: ['frankenstein/adult', 'zombie/adult', 'orc/male', 'troll/adult', 'skeleton/adult'],
-  winged: ['jack/adult', 'vampire/adult', 'alien/adult', 'rabbit/adult', 'mouse/adult'],
-  serpent: ['lizard/male', 'boarman/adult', 'rat/adult', 'wolf/male', 'pig/adult'],
-  mech: ['alien/adult', 'frankenstein/adult', 'skeleton/adult', 'zombie/adult', 'orc/male'],
-  orb: ['alien/adult', 'jack/adult', 'zombie/adult', 'sheep/adult', 'rabbit/adult'],
-  insect: ['mouse/adult', 'rat/adult', 'rabbit/adult', 'goblin/adult', 'lizard/male'],
-  shelled: ['boarman/adult', 'pig/adult', 'lizard/male', 'sheep/adult', 'troll/adult'],
-  wraith: ['skeleton/adult', 'zombie/adult', 'jack/adult', 'vampire/adult', 'alien/adult'],
-  quadruped: ['wolf/male', 'mouse/adult', 'boarman/adult', 'rat/adult', 'lizard/male'],
-  structure: ['human/male', 'orc/male', 'skeleton/adult', 'goblin/adult', 'zombie/adult'],
-  cart: ['goblin/adult', 'rat/adult', 'mouse/adult', 'pig/adult', 'rabbit/adult'],
-  centaur: ['wartotaur/adult', 'minotaur/male', 'troll/adult', 'boarman/adult', 'orc/male', 'wolf/male'],
-  floating: ['vampire/adult', 'jack/adult', 'skeleton/adult', 'alien/adult', 'zombie/adult'],
-  totem: ['sheep/adult', 'troll/adult', 'pig/adult', 'boarman/adult', 'minotaur/male'],
-  tripod: ['rat/adult', 'mouse/adult', 'alien/adult', 'goblin/adult', 'lizard/male'],
-  blob: ['pig/adult', 'sheep/adult', 'boarman/adult', 'rabbit/adult', 'troll/adult'],
-  crystal: ['zombie/adult', 'alien/adult', 'frankenstein/adult', 'skeleton/adult', 'jack/adult'],
-  swarm: ['goblin/adult', 'rabbit/adult', 'mouse/adult', 'rat/adult', 'human/male'],
-  siege: ['orc/male', 'troll/adult', 'minotaur/male', 'wartotaur/adult', 'boarman/adult'],
-  hunched: ['minotaur/male', 'boarman/adult', 'wolf/male', 'troll/adult', 'lizard/male'],
-  twinned: ['rabbit/adult', 'human/male', 'sheep/adult', 'goblin/adult', 'mouse/adult'],
+  humanoid: ['human/male', 'orc/male', 'vampire/adult', 'goblin/adult'],
+  brute: ['troll/adult', 'minotaur/male', 'wartotaur/adult', 'boarman/adult'],
+  golem: ['frankenstein/adult', 'zombie/adult', 'skeleton/adult'],
+  winged: ['jack/adult', 'vampire/adult', 'alien/adult'],
+  serpent: ['lizard/male', 'boarman/adult'],
+  mech: ['alien/adult', 'frankenstein/adult', 'skeleton/adult'],
+  orb: ['alien/adult', 'jack/adult', 'zombie/adult'],
+  insect: ['mouse/adult', 'rat/adult', 'lizard/male'],
+  shelled: ['boarman/adult', 'pig/adult', 'lizard/male'],
+  wraith: ['skeleton/adult', 'zombie/adult', 'jack/adult', 'vampire/adult'],
+  quadruped: ['wolf/male', 'boarman/adult', 'rat/adult'],
+  structure: ['human/male', 'orc/male', 'goblin/adult'],
+  cart: ['goblin/adult', 'rat/adult', 'mouse/adult'],
+  centaur: ['wartotaur/adult', 'minotaur/male', 'troll/adult'],
+  floating: ['vampire/adult', 'jack/adult', 'skeleton/adult', 'alien/adult'],
+  totem: ['troll/adult', 'sheep/adult', 'boarman/adult'],
+  tripod: ['rat/adult', 'mouse/adult', 'alien/adult'],
+  blob: ['pig/adult', 'sheep/adult', 'rabbit/adult'],
+  crystal: ['zombie/adult', 'alien/adult', 'frankenstein/adult', 'skeleton/adult'],
+  swarm: ['goblin/adult', 'rabbit/adult', 'mouse/adult'],
+  siege: ['orc/male', 'troll/adult', 'minotaur/male'],
+  hunched: ['minotaur/male', 'boarman/adult', 'troll/adult'],
+  twinned: ['rabbit/adult', 'human/male', 'goblin/adult'],
+};
+
+/**
+ * Cards whose head is not the recipe's to choose.
+ *
+ * The body plan decides the species for everything else, and that is right:
+ * it keeps a hundred and seventy figures from being one man, and nobody has
+ * to hand-cast a card nobody has heard of. But a Knight, a Musketeer and an
+ * Archer are not anonymous — a player knows what they are before they read
+ * the name, and a minotaur-headed Archer or a sheep-headed Mini P.E.K.K.A. is
+ * simply wrong however well it varies.
+ *
+ * Deliberately short. Every entry here is an axis the de-duplicator loses, so
+ * it is for cards whose identity is fixed rather than for anything that merely
+ * looks better one way.
+ */
+const WEAPON_OVERRIDE: Record<string, string> = {
+  // The pack ships a boomerang and exactly one card throws one. Leaving that
+  // to the bow pool would have been a coin flip on whether the card holding
+  // the mechanic is holding the object.
+  boomerangThrower: 'ranged/boomerang',
+};
+
+const SPECIES_OVERRIDE: Record<string, string> = {
+  knight: 'human/male',
+  archer: 'human/male',
+  musketeer: 'human/male',
+  wizard: 'human/male',
+  valkyrie: 'human/male',
+  archerQueen: 'human/male',
+  goldenKnight: 'human/male',
+  barbarian: 'human/male',
+  hogRider: 'human/male',
+  towerPrincess: 'human/male',
+  // Named for what they are, and what they are is not a mammal.
+  skeleton: 'skeleton/adult',
+  bomber: 'skeleton/adult',
+  miniPekka: 'frankenstein/adult',
+  goblin: 'goblin/adult',
+  spearGoblin: 'goblin/adult',
+  giant: 'troll/adult',
+  minion: 'jack/adult',
+  babyDragon: 'lizard/male',
+};
+
+/**
+ * Tails, by species, with "none" as a real option.
+ *
+ * This is the axis that replaced padding the species lists. A tail changes the
+ * outline without changing what the creature is, so it gives the
+ * de-duplicator five choices on exactly the figures that had almost none —
+ * beast-headed cards carrying no weapon, whose species is the only thing that
+ * varied. On anything that reads as a person it stays absent.
+ */
+const TAILS_BY_SPECIES: Record<string, readonly (string | null)[]> = {
+  wolf: [null, 'wolf', 'fluffy'],
+  boarman: [null, 'wolf', 'fluffy'],
+  pig: [null, 'fluffy', 'cat'],
+  sheep: [null, 'fluffy', 'cat'],
+  rat: [null, 'lizard', 'cat'],
+  mouse: [null, 'lizard', 'cat'],
+  rabbit: [null, 'fluffy', 'cat'],
+  lizard: [null, 'lizard', 'wolf'],
+  minotaur: [null, 'wolf', 'cat'],
+  wartotaur: [null, 'wolf', 'fluffy'],
+  troll: [null, 'wolf'],
 };
 
 /**
@@ -316,10 +383,20 @@ const HAIRED_SPECIES = ['human', 'goblin', 'orc', 'vampire', 'zombie', 'frankens
 /** Builds whose garment is a helmet-and-plate set; long hair over it reads wrong. */
 const HELMETED = new Set<BuildKind>(['hulking', 'broad']);
 
-const EAR_STYLES = ['big', 'elven', 'long', 'medium', 'down', 'hang'];
-const HORN_STYLES = ['backwards', 'curled'];
+/**
+ * Ears and horns, with "none" as a real option in both.
+ *
+ * The third axis the de-duplicator needs, and the last one available that
+ * does not change what a creature is. A weaponless, hairless, overridden card
+ * — the Giant, say — varies only by tail otherwise, which is two figures for
+ * however many cards land on that combination. Horns suit the beasts and ears
+ * the people, so neither shows up where it would look like a mistake.
+ */
+const EAR_STYLES: readonly (string | null)[] = [
+  null, 'big', 'elven', 'long', 'medium', 'down', 'hang',
+];
+const HORN_STYLES: readonly (string | null)[] = [null, 'backwards', 'curled'];
 const WING_STYLES = ['bat', 'dragonfly', 'feathered', 'lizard', 'lunar', 'monarch', 'pixie'];
-const TAIL_STYLES = ['cat', 'fluffy', 'lizard', 'wolf'];
 
 /**
  * Hair colours.
@@ -353,9 +430,6 @@ const SASH_COLOURS = [
   'navy', 'yellow', 'orange', 'green', 'purple', 'maroon', 'tan', 'walnut',
   'pink', 'charcoal', 'white', 'brown', 'leather', 'gray', 'black', 'blue',
 ];
-
-/** Body plans that trail something behind them. */
-const TAILED_PLANS = new Set<BodyPlan>(['serpent', 'quadruped', 'insect', 'brute', 'shelled']);
 
 function hash(text: string): number {
   let h = 2166136261;
@@ -515,6 +589,7 @@ function layersFor(
   let hairStyle: string | null = null;
   let hairColour: { hue: number; sat: number; light: number } | null = null;
   let overlay: string | null = null;
+  let crown: string | null = null;
   const push = (l: Layer | null) => {
     if (l) layers.push(l);
   };
@@ -529,22 +604,21 @@ function layersFor(
    * distinguish it from another on the same body plan.
    */
   const heads = HEADS_BY_PLAN[spec.body] ?? ['human/male'];
-  const head = pick(heads, modelId, `species|${spec.head}`, attempt);
+  const head = SPECIES_OVERRIDE[modelId] ?? pick(heads, modelId, `species|${spec.head}`, attempt);
   const species = head.split('/')[0];
+  const tail = pick(TAILS_BY_SPECIES[species] ?? [null], modelId, 'tail', attempt);
   const torso = pick(TORSOS_BY_BUILD[spec.build] ?? ['clothes/longsleeve/longsleeve/male'], modelId, 'torso', attempt);
   const legs = pick(LEGS_BY_BUILD[spec.build] ?? ['pantaloons/male'], modelId, 'legs', attempt);
   const feet = pick(FEET_BY_BUILD[spec.build] ?? ['boots/basic/male'], modelId, 'feet', attempt);
   const pool = WEAPONS_BY_KIND[spec.weapon] ?? [];
-  const weapon = pool.length > 0 ? pick(pool, modelId, 'weapon', attempt) : null;
+  const weapon =
+    WEAPON_OVERRIDE[modelId] ?? (pool.length > 0 ? pick(pool, modelId, 'weapon', attempt) : null);
   const sexDir = bodyDir === 'child' ? 'child' : 'male';
   const strike = agreedStrike(bodyDir, weapon, STRIKE_BY_KIND[spec.weapon] ?? 'slash');
 
   // --- behind the body ---------------------------------------------------
   if (weapon) push(layerFor('weapon', [`${weapon}/`], strike, seed, 'behind'));
-  if (TAILED_PLANS.has(spec.body)) {
-    const tail = pick(TAIL_STYLES, modelId, 'tail');
-    push(layerFor('body', [`tail/${tail}/`], strike, seed));
-  }
+  if (tail) push(layerFor('body', [`tail/${tail}/`], strike, seed));
   if (spec.accessory === 'wings') {
     const wing = pick(WING_STYLES, modelId, 'wings');
     push(layerFor('body', [`wings/${wing}/`], strike, seed, 'behind'));
@@ -561,10 +635,20 @@ function layersFor(
   );
   push(layerFor('head', [`heads/${head}/`, 'heads/human/male/'], strike, seed));
 
-  if (spec.head === 'horned') {
-    push(layerFor('head', [`horns/${pick(HORN_STYLES, modelId, 'horns')}/`], strike, seed));
-  } else if (HAIRED_SPECIES.includes(species)) {
-    push(layerFor('head', [`ears/${pick(EAR_STYLES, modelId, 'ears')}/`], strike, seed));
+  /*
+   * Horns for beasts, ears for people, and a card that declares itself horned
+   * always gets a pair. Recorded, because it is one of the axes the outline
+   * comparison is allowed to lean on.
+   */
+  if (HAIRED_SPECIES.includes(species)) {
+    crown = pick(EAR_STYLES, modelId, 'ears', attempt);
+    if (crown) push(layerFor('head', [`ears/${crown}/`], strike, seed));
+  } else {
+    const horns = spec.head === 'horned'
+      ? pick(HORN_STYLES.filter(Boolean), modelId, 'horns', attempt)
+      : pick(HORN_STYLES, modelId, 'horns', attempt);
+    crown = horns;
+    if (horns) push(layerFor('head', [`horns/${horns}/`], strike, seed));
   }
   if (HAIRED_SPECIES.includes(species)) {
     const styles = HELMETED.has(spec.build) ? SHORT_HAIR : HAIR_STYLES;
@@ -629,7 +713,9 @@ function layersFor(
    * the guarantee is made of. The rest still vary; they are just not evidence
    * that two cards can be told apart.
    */
-  const recipe = [head, bodyDir, weapon ?? '-', hairStyle ?? '-'].join('|');
+  const recipe = [
+    head, bodyDir, weapon ?? '-', hairStyle ?? '-', tail ?? '-', crown ?? '-',
+  ].join('|');
   void torso;
   void legs;
   void feet;
@@ -728,6 +814,15 @@ function build(): void {
   const manifest: Record<string, string> = {};
   const done = new Set<string>();
   const recipes = new Set<string>();
+  /*
+   * What each model actually resolved to, written into the manifest.
+   *
+   * The recipe is chosen by hashing and re-rolling, so it is not something you
+   * can read off the registry — and when a card comes out looking wrong, the
+   * first question is always "what did it pick?". Recording it turns that from
+   * an afternoon of instrumenting the build into grepping a file.
+   */
+  const recipeLog: Record<string, string> = {};
   const outlines: Array<{ id: string; grid: Signature }> = [];
   let made = 0;
   let skipped = 0;
@@ -819,12 +914,22 @@ function build(): void {
     const file = `${card.modelId}.png`;
     writeFileSync(`${OUT}/${file}`, encode(atlas));
     manifest[card.modelId] = file;
+    recipeLog[card.modelId] = accepted;
     made++;
   }
 
   writeFileSync(
     `${OUT}/manifest.json`,
-    JSON.stringify({ walkFrames: WALK_FRAMES, strikeFrames: STRIKE_FRAMES, files: manifest }, null, 1),
+    JSON.stringify(
+      {
+        walkFrames: WALK_FRAMES,
+        strikeFrames: STRIKE_FRAMES,
+        files: manifest,
+        recipes: recipeLog,
+      },
+      null,
+      1,
+    ),
   );
   console.log(
     `wrote ${made} atlases for ${cards.length} cards ` +
