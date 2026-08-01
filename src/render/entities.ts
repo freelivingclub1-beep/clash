@@ -142,13 +142,28 @@ function drawTroop(
   const lungeX = (fxToFloat(entity.faceX) / facingLength) * lungeStrength * radius * 0.45;
   const lungeY = (fxToFloat(entity.faceY) / facingLength) * lungeStrength * radius * 0.25;
 
-  ctx.drawImage(
-    sprite.source,
-    screenX - drawWidth / 2 + lungeX,
-    footY - drawHeight - lungeY,
-    drawWidth,
-    drawHeight,
-  );
+  if (sprite.sx !== undefined && sprite.sy !== undefined) {
+    // Atlas frame: blit one cell out of the strip.
+    ctx.drawImage(
+      sprite.source,
+      sprite.sx,
+      sprite.sy,
+      sprite.width,
+      sprite.height,
+      screenX - drawWidth / 2 + lungeX,
+      footY - drawHeight - lungeY,
+      drawWidth,
+      drawHeight,
+    );
+  } else {
+    ctx.drawImage(
+      sprite.source,
+      screenX - drawWidth / 2 + lungeX,
+      footY - drawHeight - lungeY,
+      drawWidth,
+      drawHeight,
+    );
+  }
 
   ctx.globalAlpha = 1;
 

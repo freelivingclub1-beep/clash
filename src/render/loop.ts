@@ -25,7 +25,7 @@ import {
   FIELD_TOP,
   FIELD_HEIGHT,
 } from './camera';
-import { warmSprites } from './sprites';
+import { warmSprites, warmAtlases } from './sprites';
 import { VfxSystem } from './vfx';
 import { tryGetCard } from '@cards/registry';
 import type { CardDefinition } from '@cards/schema';
@@ -132,7 +132,9 @@ export class BattleRenderer {
      * frame, rather than paying for each card's walk and strike cycles inside
      * the frame that first draws it.
      */
-    warmSprites(BattleRenderer.warmSet(this.runner.state));
+    const warm = BattleRenderer.warmSet(this.runner.state);
+    warmAtlases(warm);
+    warmSprites(warm);
 
     this.running = true;
     this.lastTimestamp = 0;

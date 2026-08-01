@@ -1186,6 +1186,84 @@ export interface DrawnSprite {
   source: CanvasImageSource;
   width: number;
   height: number;
+  /**
+   * Sub-rectangle to blit, when the source is an atlas rather than a
+   * standalone bitmap. Absent for the procedurally generated figures, which
+   * are one image per pose.
+   */
+  sx?: number;
+  sy?: number;
+}
+
+// ---------------------------------------------------------------------------
+// Universal LPC character atlases
+// ---------------------------------------------------------------------------
+
+/**
+ * Real character art, built from the Universal LPC Spritesheet collection.
+ *
+ * `scripts/lpc/build.ts` composites a body, head, garment, legs, team sash and
+ * weapon into one strip per card per side; see `src/assets/characters/CREDITS.md`
+ * for authorship and licensing. The procedural composer below is still the
+ * fallback — a card with no atlas, or one whose image has not decoded yet, is
+ * drawn exactly as it was before, so nothing ever renders as a blank.
+ *
+ * The strip is walk frames followed by strike frames, with the back-facing row
+ * above the front-facing one. Which row a unit uses is decided by its side:
+ * you watch your own troops march away from you and the enemy's march toward
+ * you, which is both the convention of the genre and free directional art.
+ */
+const ATLAS_URLS = import.meta.glob('../assets/characters/*.png', {
+  eager: true,
+  query: '?url',
+  import: 'default',
+}) as Record<string, string>;
+
+interface AtlasMeta {
+  walkFrames: number;
+  strikeFrames: number;
+}
+
+const ATLAS_META: AtlasMeta = { walkFrames: 9, strikeFrames: 6 };
+export const ATLAS_FRAME = 64;
+
+const atlasByKey = new Map<string, string>();
+for (const [path, url] of Object.entries(ATLAS_URLS)) {
+  const file = path.split('/').pop() ?? '';
+  atlasByKey.set(file.replace(/\.png$/, ''), url);
+}
+
+const atlasImages = new Map<string, HTMLImageElement | null>();
+
+/** The decoded atlas for a card and side, or null until it is ready. */
+function atlasFor(card: CardDefinition, team: Team): HTMLImageElement | null {
+  const key = `${card.modelId}_${team}`;
+  if (!atlasByKey.has(key)) return null;
+
+  const cached = atlasImages.get(key);
+  if (cached !== undefined) return cached && cached.complete && cached.naturalWidth > 0 ? cached : null;
+
+  if (typeof Image === 'undefined') {
+    atlasImages.set(key, null);
+    return null;
+  }
+  const img = new Image();
+  img.src = atlasByKey.get(key) as string;
+  atlasImages.set(key, img);
+  return null;
+}
+
+/** True when this card has real character art available. */
+export function hasAtlas(card: CardDefinition, team: Team): boolean {
+  return atlasByKey.has(`${card.modelId}_${team}`);
+}
+
+/** Kick off decoding for every atlas a match can use. */
+export function warmAtlases(cards: readonly CardDefinition[]): void {
+  for (const card of cards) {
+    atlasFor(card, 0);
+    atlasFor(card, 1);
+  }
 }
 
 /**
@@ -1227,6 +1305,29 @@ export function spriteFor(
   const external = externalImage(card);
   if (external) {
     return { source: external, width: external.width, height: external.height };
+  }
+
+  /*
+   * Real character art first.
+   *
+   * The atlas holds `walkFrames` walk poses followed by `strikeFrames` strike
+   * poses, back row above front row. A unit shows its back on the near side
+   * and its face on the far side, which is what the team index selects.
+   */
+  const atlas = atlasFor(card, team);
+  if (atlas) {
+    const { walkFrames, strikeFrames } = ATLAS_META;
+    const column =
+      strike > 0
+        ? walkFrames + Math.min(strikeFrames - 1, Math.max(0, Math.floor(strike * strikeFrames)))
+        : Math.min(walkFrames - 1, Math.max(0, Math.floor(phase * walkFrames)));
+    return {
+      source: atlas,
+      width: ATLAS_FRAME,
+      height: ATLAS_FRAME,
+      sx: column * ATLAS_FRAME,
+      sy: team === 0 ? 0 : ATLAS_FRAME,
+    };
   }
 
   const key = `${card.id}|${team}`;

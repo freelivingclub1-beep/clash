@@ -12,7 +12,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "build:standalone": "node scripts/build-standalone.mjs",
-    "balance": "vite-node scripts/balance-report.ts"
+    "balance": "vite-node scripts/balance-report.ts",
+    "assets:fetch": "node scripts/lpc/fetch.mjs",
+    "assets:characters": "vite-node scripts/lpc/build.ts"
   },
   "dependencies": {
     "react": "^18.3.1",
@@ -26,7 +28,10 @@
     "@typescript-eslint/eslint-plugin": "^8.15.0",
     "@typescript-eslint/parser": "^8.15.0",
     "@vitejs/plugin-react": "^4.3.3",
+    "adm-zip": "^0.6.0",
     "eslint": "^8.57.1",
+    "playwright": "^1.62.1",
+    "pngjs": "^7.0.0",
     "typescript": "^5.6.3",
     "vite": "^5.4.11",
     "vitest": "^2.1.5"
