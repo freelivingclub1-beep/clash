@@ -12,10 +12,11 @@ export declare function composeAtlas(opts: {
   walkFrames: number;
   strikeFrames: number;
 }): unknown;
-export declare function recolour(
-  sheet: unknown,
-  palette: { hue: number; sat: number; light: number },
-): unknown;
+export type Palette =
+  | { hue: number; sat: number; light: number; ramp?: undefined }
+  /** Brightness-indexed stops: `[t, r, g, b]`, t in 0..1. */
+  | { ramp: Array<[number, number, number, number]> };
+export declare function recolour(sheet: unknown, palette: Palette): unknown;
 export declare function encode(png: unknown, colours?: number): Buffer;
 export declare const CELL: number;
 export declare const LOGICAL: number;

@@ -94,9 +94,11 @@ export function frameSize(sheet) {
  * the artist's shading survives: the highlights stay highlights and the
  * shadows stay shadows, which a flat colour fill would destroy.
  */
-export function recolour(sheet, { hue, sat, light }) {
+export function recolour(sheet, palette) {
   const out = new PNG({ width: sheet.width, height: sheet.height, filterType: -1 });
   sheet.data.copy(out.data);
+  const ramp = palette.ramp ? normaliseRamp(palette.ramp) : null;
+
   for (let i = 0; i < out.data.length; i += 4) {
     if (out.data[i + 3] === 0) continue;
     const r = out.data[i] / 255;
@@ -104,6 +106,16 @@ export function recolour(sheet, { hue, sat, light }) {
     const b = out.data[i + 2] / 255;
     const max = Math.max(r, g, b);
     const min = Math.min(r, g, b);
+
+    if (ramp) {
+      const [rr, gg, bb] = sampleRamp(ramp, (max + min) / 2);
+      out.data[i] = rr;
+      out.data[i + 1] = gg;
+      out.data[i + 2] = bb;
+      continue;
+    }
+
+    const { hue, sat, light } = palette;
     const l = Math.min(1, ((max + min) / 2) * light);
     const c = (1 - Math.abs(2 * l - 1)) * sat;
     const hp = (hue % 360) / 60;
@@ -123,6 +135,38 @@ export function recolour(sheet, { hue, sat, light }) {
     out.data[i + 2] = Math.round(Math.max(0, Math.min(1, bb + m)) * 255);
   }
   return out;
+}
+
+/**
+ * A palette indexed by brightness, for coats that are more than one colour.
+ *
+ * Replacing hue and saturation wholesale can only ever produce a monochrome
+ * animal — a tan dog, a red dog, a grey dog. A Doberman is not one colour: it
+ * is black over most of its body with rust on the muzzle, brows, chest and
+ * legs, and those rust markings sit exactly where the artist put the
+ * highlights. So mapping the source's brightness through a ramp lands black in
+ * the shadowed mass and rust on the lit edges, which is the marking pattern
+ * rather than an imitation of it.
+ */
+function normaliseRamp(stops) {
+  return [...stops].sort((a, b) => a[0] - b[0]);
+}
+
+function sampleRamp(ramp, t) {
+  const v = Math.max(0, Math.min(1, t));
+  if (v <= ramp[0][0]) return ramp[0].slice(1);
+  for (let i = 1; i < ramp.length; i++) {
+    if (v > ramp[i][0]) continue;
+    const [t0, r0, g0, b0] = ramp[i - 1];
+    const [t1, r1, g1, b1] = ramp[i];
+    const k = t1 === t0 ? 0 : (v - t0) / (t1 - t0);
+    return [
+      Math.round(r0 + (r1 - r0) * k),
+      Math.round(g0 + (g1 - g0) * k),
+      Math.round(b0 + (b1 - b0) * k),
+    ];
+  }
+  return ramp[ramp.length - 1].slice(1);
 }
 
 /** Alpha-composite `src` over `dst` at an offset, both RGBA PNG buffers. */

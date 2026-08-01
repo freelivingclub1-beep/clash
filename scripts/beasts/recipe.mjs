@@ -26,14 +26,34 @@
  */
 export const BEASTS = {
   /*
-   * Elite Hounds. Black with tan points, which is what makes a Doberman read
-   * as a Doberman rather than as a large dark dog: the lightness curve of the
-   * source wolf is preserved, so its lit surfaces come through as the tan and
-   * its shadowed ones as the black.
+   * Elite Hounds — a Doberman, which is two colours and not one.
+   *
+   * A hue-and-saturation replacement can only ever make a monochrome dog: a
+   * tan one, a red one, a grey one. The breed's whole read is black over the
+   * mass of the body with rust on the muzzle, brows, chest and legs — and on
+   * a side-on sprite those markings sit exactly where the artist put the
+   * highlights, because they are the parts of the animal that catch light.
+   *
+   * So the source wolf's brightness is mapped through a ramp instead. The
+   * shadowed mass lands on near-black, the mid-tones on the dark transition a
+   * real coat has, and the lit edges on rust. That reproduces the marking
+   * pattern rather than imitating it, and it stays legible at fifty pixels
+   * tall because the rust carries the silhouette that pure black would lose
+   * against a dark field.
    */
   eliteHound: {
     sheet: 'wolf',
-    palette: { hue: 22, sat: 0.72, light: 0.7 },
+    palette: {
+      ramp: [
+        [0.0, 14, 13, 16],    // deepest shadow — near black
+        [0.34, 32, 30, 34],   // the black of the coat
+        [0.5, 58, 44, 36],    // where black gives way to rust
+        [0.62, 112, 60, 26],  // rust, shadowed
+        [0.78, 164, 88, 34],  // rust
+        [0.9, 200, 118, 50],  // rust, lit
+        [1.0, 226, 158, 88],  // the brightest points: muzzle and brows
+      ],
+    },
     height: 0.78,
   },
 

@@ -21,7 +21,15 @@ import '../../src/cards/data';
 import { selectableCards } from '../../src/cards/registry';
 import { MODELS } from '../../src/render/models';
 import type { BodyPlan, BuildKind, ModelSpec, WeaponKind } from '../../src/render/models';
-import { readSheet, listEntries, composeAtlas, encode, recolour, type Layer } from './compose.mjs';
+import {
+  readSheet,
+  listEntries,
+  composeAtlas,
+  encode,
+  recolour,
+  CELL,
+  type Layer,
+} from './compose.mjs';
 import { BEASTS } from '../beasts/recipe.mjs';
 
 const SRC = process.env.LPC_DIR ?? '/tmp/lpc/lpc-runtime-zips/zips';
@@ -61,72 +69,130 @@ const BODY_BY_BUILD: Record<BuildKind, string> = {
  * silhouette the card already had rather than its name — the plan was chosen
  * to make cards distinguishable and that work should not be thrown away.
  */
-const HEAD_BY_PLAN: Record<BodyPlan, string> = {
-  humanoid: 'human/male',
-  brute: 'troll/adult',
-  golem: 'frankenstein/adult',
-  winged: 'jack/adult',
-  serpent: 'lizard/male',
-  mech: 'alien/adult',
-  orb: 'alien/adult',
-  insect: 'mouse/adult',
-  shelled: 'boarman/adult',
-  wraith: 'skeleton/adult',
-  quadruped: 'wolf/male',
-  structure: 'human/male',
-  cart: 'goblin/adult',
-  centaur: 'wartotaur/adult',
-  floating: 'vampire/adult',
-  totem: 'sheep/adult',
-  tripod: 'rat/adult',
-  blob: 'pig/adult',
-  crystal: 'zombie/adult',
-  swarm: 'goblin/adult',
-  siege: 'orc/male',
-  hunched: 'minotaur/male',
-  twinned: 'rabbit/adult',
+const HEADS_BY_PLAN: Record<BodyPlan, readonly string[]> = {
+  humanoid: ['human/male', 'orc/male', 'vampire/adult'],
+  brute: ['troll/adult', 'minotaur/male', 'boarman/adult'],
+  golem: ['frankenstein/adult', 'zombie/adult', 'orc/male'],
+  winged: ['jack/adult', 'vampire/adult', 'alien/adult'],
+  serpent: ['lizard/male', 'boarman/adult'],
+  mech: ['alien/adult', 'frankenstein/adult'],
+  orb: ['alien/adult', 'jack/adult'],
+  insect: ['mouse/adult', 'rat/adult'],
+  shelled: ['boarman/adult', 'pig/adult'],
+  wraith: ['skeleton/adult', 'zombie/adult', 'jack/adult'],
+  quadruped: ['wolf/male', 'mouse/adult'],
+  structure: ['human/male', 'orc/male'],
+  cart: ['goblin/adult', 'rat/adult'],
+  centaur: ['wartotaur/adult', 'minotaur/male'],
+  floating: ['vampire/adult', 'jack/adult', 'skeleton/adult'],
+  totem: ['sheep/adult', 'troll/adult'],
+  tripod: ['rat/adult', 'mouse/adult'],
+  blob: ['pig/adult', 'sheep/adult'],
+  crystal: ['zombie/adult', 'alien/adult'],
+  swarm: ['goblin/adult', 'rabbit/adult'],
+  siege: ['orc/male', 'troll/adult'],
+  hunched: ['minotaur/male', 'boarman/adult'],
+  twinned: ['rabbit/adult', 'human/male'],
 };
 
 /**
- * Garment by build. These are real directories in the pack — LPC nests
- * clothing two levels deep (`clothes/longsleeve/longsleeve/male/`) rather than
- * one, and naming the category alone silently resolves to nothing, which is
- * how the first run produced a roster of bare-chested units.
- */
-const TORSO_BY_BUILD: Record<BuildKind, string> = {
-  normal: 'clothes/longsleeve/longsleeve/male',
-  lean: 'clothes/shortsleeve/tshirt/male',
-  gaunt: 'bandage/male',
-  stout: 'armour/leather/male',
-  hulking: 'armour/plate/male',
-  squat: 'clothes/sleeveless/sleeveless/male',
-  towering: 'clothes/longsleeve/formal/male',
-  tiny: 'clothes/shortsleeve/shortsleeve/male',
-  broad: 'armour/legion/male',
-};
-
-/** Footwear by build, so a plated brute is not barefoot next to a scout. */
-const FEET_BY_BUILD: Record<BuildKind, string> = {
-  normal: 'boots/basic/male',
-  lean: 'boots/revised/thin',
-  gaunt: 'sandals/thin',
-  stout: 'boots/fold/male',
-  hulking: 'armour/plate/male',
-  squat: 'boots/rimmed/male',
-  towering: 'boots/revised/male',
-  tiny: 'sandals/male',
-  broad: 'accessory/plate_toe_thick/male',
-};
-
-/**
- * Weapons by kind — a pool per kind, not one entry.
+ * Garment, trousers and footwear — pools, not single entries.
  *
- * The pack holds thirty-odd weapons and the first build used ten of them, so
- * every card that swung a sword swung the same arming sword. Picking from a
- * pool by model id costs nothing and means a rank of swordsmen is a rank of
- * different swordsmen. `_off` variants (an unlit staff) are left out: they are
- * the same prop with its glow switched off, which is not variety.
+ * This is where a hundred and fifty figures were quietly collapsing into a
+ * few dozen. Only three things in a card's model reached the composed figure:
+ * its body plan chose the species, its build chose *one* torso, *one* pair of
+ * legs and *one* pair of boots, and its weapon kind chose a weapon. Two cards
+ * on the same plan and build with the same kind of weapon therefore came out
+ * pixel-for-pixel alike however different their entries looked in the
+ * registry — Halberdier and Thorn Warden matched at a shape score of 1.000.
+ *
+ * A pool per build, picked by hashing the model id, turns one combination into
+ * several hundred. The build still decides what *kind* of thing the figure
+ * wears, which is what made the mapping worth having; it no longer decides the
+ * exact garment.
+ *
+ * Every pool ends in an entry known to exist, because `layerFor` walks the
+ * list and takes the first hit — and a pool where nothing resolves produces a
+ * figure with no shirt rather than an error.
  */
+const TORSOS_BY_BUILD: Record<BuildKind, readonly string[]> = {
+  normal: [
+    'clothes/longsleeve/longsleeve/male', 'clothes/longsleeve/longsleeve2/male',
+    'clothes/longsleeve/laced/male', 'clothes/longsleeve/scoop/male',
+    'jacket/collared/male', 'clothes/longsleeve/longsleeves_cuffed/male',
+  ],
+  lean: [
+    'clothes/shortsleeve/tshirt/male', 'clothes/shortsleeve/tshirt_vneck/male',
+    'clothes/shortsleeve/shortsleeve/male', 'clothes/vest/male',
+    'clothes/shortsleeve/shortsleeves2/male',
+  ],
+  gaunt: [
+    'bandage/male', 'clothes/sleeveless/laced/male', 'clothes/vest_open/male',
+    'jacket/trench/male', 'clothes/sleeveless/striped/male',
+  ],
+  stout: [
+    'armour/leather/male', 'chainmail/male', 'jacket/tabard/male',
+    'aprons/overalls/male', 'clothes/longsleeve/longsleeves/male',
+  ],
+  hulking: [
+    'armour/plate/male', 'armour/legion/male', 'chainmail/male',
+    'jacket/tabard/male',
+  ],
+  squat: [
+    'clothes/sleeveless/sleeveless/male', 'aprons/suspenders/male',
+    'clothes/vest/male', 'clothes/sleeveless/sleeveless2_polo/male',
+  ],
+  towering: [
+    'clothes/longsleeve/formal/male', 'jacket/frock/male', 'jacket/iverness/male',
+    'jacket/trench/male', 'clothes/longsleeve/formal_striped/male',
+  ],
+  tiny: [
+    'clothes/shortsleeve/shortsleeve/male', 'clothes/shirt/child',
+    'aprons/apron/male', 'clothes/shortsleeve/tshirt_scoop/male',
+  ],
+  broad: [
+    'armour/legion/male', 'armour/leather/male', 'jacket/tabard/male',
+    'chainmail/male',
+  ],
+};
+
+const LEGS_BY_BUILD: Record<BuildKind, readonly string[]> = {
+  normal: ['pantaloons/male', 'pants/male', 'hose/male'],
+  lean: ['leggings/thin', 'hose/thin', 'pants2/thin', 'pantaloons/thin'],
+  gaunt: ['leggings2/thin', 'hose/thin', 'cuffed/thin', 'pantaloons/thin'],
+  stout: ['pants/male', 'cuffed/male', 'fur/male', 'pantaloons/male'],
+  hulking: ['armour/plate/male', 'fur/male', 'pants2/male', 'pantaloons/male'],
+  squat: ['pants/child', 'pantaloons/male', 'leggings/male'],
+  towering: ['formal/male', 'formal_striped/male', 'cuffed/male', 'pantaloons/male'],
+  tiny: ['pants/child', 'leggings/thin', 'pantaloons/thin', 'pantaloons/male'],
+  broad: ['armour/plate/male', 'pants2/male', 'fur/male', 'pantaloons/male'],
+};
+
+const FEET_BY_BUILD: Record<BuildKind, readonly string[]> = {
+  normal: ['boots/basic/male', 'boots/fold/male', 'shoes/male', 'boots/rimmed/male'],
+  lean: ['boots/revised/thin', 'boots/basic/thin', 'sandals/thin', 'boots/basic/male'],
+  gaunt: ['sandals/thin', 'boots/fold/thin', 'slippers/thin', 'boots/basic/male'],
+  stout: ['boots/fold/male', 'boots/rimmed/male', 'boots/basic/male'],
+  hulking: ['armour/plate/male', 'accessory/plate_toe_thick/male', 'boots/rimmed/male'],
+  squat: ['boots/rimmed/male', 'shoes/male', 'boots/basic/male'],
+  towering: ['boots/revised/male', 'shoes/male', 'boots/fold/male', 'boots/basic/male'],
+  tiny: ['sandals/male', 'slippers/male', 'shoes/male', 'boots/basic/male'],
+  broad: ['accessory/plate_toe_thick/male', 'accessory/plate_toe/male', 'armour/plate/male', 'boots/basic/male'],
+};
+
+/**
+ * A belt, obi or over-jacket worn over the garment.
+ *
+ * One more independent axis, and the cheapest one available: it is a layer the
+ * pack already has, it sits where the eye goes, and it multiplies the number
+ * of distinguishable figures by itself.
+ */
+const OVERLAYS: readonly string[] = [
+  'waist/belt_leather/male', 'waist/belt_double/male', 'waist/belt_loose/male',
+  'waist/obi/male', 'waist/belt_belly/male', 'waist/belt_robe/male',
+  'clothes/vest_open/male', 'jacket/tabard/male', 'waist/sash_narrow/male',
+];
+
 const WEAPONS_BY_KIND: Record<WeaponKind, readonly string[]> = {
   sword: [
     'sword/arming', 'sword/longsword', 'sword/katana', 'sword/saber',
@@ -290,8 +356,8 @@ function hash(text: string): number {
 
 /** A stable per-model index into a list, varied by `salt` so two accessories
  *  on the same model do not both land on entry zero. */
-function pick<T>(list: readonly T[], id: string, salt: string): T {
-  return list[hash(`${id}|${salt}`) % list.length];
+function pick<T>(list: readonly T[], id: string, salt: string, attempt = 0): T {
+  return list[hash(attempt === 0 ? `${id}|${salt}` : `${id}|${salt}|${attempt}`) % list.length];
 }
 
 /**
@@ -417,22 +483,47 @@ function tinted(
   };
 }
 
-/** Assemble the full stack for one model, ordered back to front. */
-function layersFor(modelId: string, spec: ModelSpec): Layer[] {
+/**
+ * Assemble the full stack for one model, ordered back to front.
+ *
+ * `attempt` re-rolls every choice. Pools make a collision unlikely rather than
+ * impossible — two cards on the same plan, build and weapon kind can still
+ * land on the same entry in each pool — and "unlikely" is not a property worth
+ * relying on when the failure mode is two cards a player cannot tell apart.
+ * The caller retries with a higher attempt until the recipe is one no other
+ * card already has.
+ */
+function layersFor(
+  modelId: string,
+  spec: ModelSpec,
+  attempt = 0,
+): { layers: Layer[]; recipe: string } {
   const layers: Layer[] = [];
   const seed = hash(modelId);
+  let hairStyle: string | null = null;
+  let hairColour: { hue: number; sat: number; light: number } | null = null;
+  let overlay: string | null = null;
   const push = (l: Layer | null) => {
     if (l) layers.push(l);
   };
 
   const bodyDir = BODY_BY_BUILD[spec.build] ?? 'male';
   const bodyPlain = bodyDir === 'skeleton' || bodyDir === 'zombie';
-  const head = HEAD_BY_PLAN[spec.body] ?? 'human/male';
+  /*
+   * Every axis is now picked per model, and each is salted differently so two
+   * cards agreeing on one do not agree on all of them. `spec.head` salts the
+   * species: it had been dead input — the composer read it only to decide
+   * whether to add horns — so a card's declared head did nothing to
+   * distinguish it from another on the same body plan.
+   */
+  const heads = HEADS_BY_PLAN[spec.body] ?? ['human/male'];
+  const head = pick(heads, modelId, `species|${spec.head}`, attempt);
   const species = head.split('/')[0];
-  const torso = TORSO_BY_BUILD[spec.build] ?? 'clothes/longsleeve/longsleeve/male';
-  const feet = FEET_BY_BUILD[spec.build] ?? 'boots/basic/male';
+  const torso = pick(TORSOS_BY_BUILD[spec.build] ?? ['clothes/longsleeve/longsleeve/male'], modelId, 'torso', attempt);
+  const legs = pick(LEGS_BY_BUILD[spec.build] ?? ['pantaloons/male'], modelId, 'legs', attempt);
+  const feet = pick(FEET_BY_BUILD[spec.build] ?? ['boots/basic/male'], modelId, 'feet', attempt);
   const pool = WEAPONS_BY_KIND[spec.weapon] ?? [];
-  const weapon = pool.length > 0 ? pick(pool, modelId, 'weapon') : null;
+  const weapon = pool.length > 0 ? pick(pool, modelId, 'weapon', attempt) : null;
   const sexDir = bodyDir === 'child' ? 'child' : 'male';
   const strike = agreedStrike(bodyDir, weapon, STRIKE_BY_KIND[spec.weapon] ?? 'slash');
 
@@ -465,12 +556,13 @@ function layersFor(modelId: string, spec: ModelSpec): Layer[] {
   }
   if (HAIRED_SPECIES.includes(species)) {
     const styles = HELMETED.has(spec.build) ? SHORT_HAIR : HAIR_STYLES;
-    const style = pick(styles, modelId, 'hair');
-    const hair = layerFor('hair', [`${style}/adult/`, `${style}/`], strike, hash(`${modelId}|hue`));
-    push(tinted(hair, pick(HAIR_COLOURS, modelId, 'haircolour')));
+    hairStyle = pick(styles, modelId, 'hair', attempt);
+    hairColour = pick(HAIR_COLOURS, modelId, 'haircolour', attempt);
+    const hair = layerFor('hair', [`${hairStyle}/adult/`, `${hairStyle}/`], strike, hash(`${modelId}|hue`));
+    push(tinted(hair, hairColour));
   }
 
-  push(layerFor('legs', [`pantaloons/${sexDir}/`, 'pantaloons/male/'], strike, seed));
+  push(layerFor('legs', [`${legs}/`, `pantaloons/${sexDir}/`, 'pantaloons/male/'], strike, seed));
   push(layerFor('feet', [`${feet}/`, 'boots/basic/male/'], strike, seed));
   push(
     layerFor(
@@ -481,8 +573,20 @@ function layersFor(modelId: string, spec: ModelSpec): Layer[] {
     ),
   );
 
+  /*
+   * A belt or over-jacket, and only on some figures.
+   *
+   * Applying it to everything would be a uniform, which is the problem this is
+   * meant to solve rather than another instance of it. Two thirds is enough to
+   * break up a rank without becoming the rank's defining feature.
+   */
+  if (hash(`${modelId}|overlay?|${attempt}`) % 3 !== 0) {
+    overlay = pick(OVERLAYS, modelId, 'overlay', attempt);
+    push(layerFor('torso', [`${overlay}/`], strike, seed));
+  }
+
   // The sash goes over the torso so armour can never hide it.
-  const sash = pick(SASH_COLOURS, modelId, 'sash');
+  const sash = pick(SASH_COLOURS, modelId, 'sash', attempt);
   push(
     layerFor(
       'torso',
@@ -499,17 +603,90 @@ function layersFor(modelId: string, spec: ModelSpec): Layer[] {
   }
   if (weapon) push(layerFor('weapon', [`${weapon}/`], strike, seed, 'front'));
 
-  return layers;
+  /*
+   * The recipe, as a string, and deliberately only the parts that change the
+   * *picture* rather than its palette.
+   *
+   * Only four axes, arrived at by measuring rather than by taste. The first
+   * version listed everything and reported every card distinct while two pairs
+   * still matched at a shape similarity of 1.000; the second dropped the two
+   * colour axes and they still matched. Garment, trousers, boots and belt turn
+   * out to be almost pure colour at this size — a chainmail shirt and a
+   * leather one have the same outline. What actually moves the silhouette is
+   * the species, the body frame, the weapon and the hair, so those are what
+   * the guarantee is made of. The rest still vary; they are just not evidence
+   * that two cards can be told apart.
+   */
+  const recipe = [head, bodyDir, weapon ?? '-', hairStyle ?? '-'].join('|');
+  void torso;
+  void legs;
+  void feet;
+  void overlay;
+  void hairColour;
+  void sash;
+
+  return { layers, recipe };
 }
+
+/**
+ * The composed figure's outline, as a coarse coverage grid.
+ *
+ * The recipe fingerprint is a proxy for "these two will look different", and a
+ * proxy is exactly as good as its assumptions. It said garment and boots were
+ * distinguishing axes; measurement said they are almost pure colour, and pairs
+ * kept coming out with identical outlines anyway. So the build now compares
+ * the thing the eye compares. Front-facing standing pose, which is what a card
+ * face shows and what a player sees marching toward them.
+ */
+const SIGNATURE_N = 16;
+
+function outline(atlas: { width: number; data: Buffer }): number[] {
+  const step = CELL / SIGNATURE_N;
+  const grid: number[] = [];
+  for (let y = 0; y < SIGNATURE_N; y++) {
+    for (let x = 0; x < SIGNATURE_N; x++) {
+      let a = 0;
+      let n = 0;
+      for (let yy = 0; yy < step; yy++) {
+        for (let xx = 0; xx < step; xx++) {
+          const sx = Math.floor(x * step + xx);
+          const sy = CELL + Math.floor(y * step + yy);
+          a += atlas.data[((sy * atlas.width + sx) << 2) + 3] / 255;
+          n++;
+        }
+      }
+      grid.push(a / n);
+    }
+  }
+  return grid;
+}
+
+function similarity(a: readonly number[], b: readonly number[]): number {
+  let dot = 0;
+  let na = 0;
+  let nb = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    na += a[i] * a[i];
+    nb += b[i] * b[i];
+  }
+  return dot / (Math.sqrt(na) * Math.sqrt(nb) || 1);
+}
+
+/** Above this, two figures read as the same unit at the size they are drawn. */
+const TOO_ALIKE = 0.999;
 
 function build(): void {
   mkdirSync(OUT, { recursive: true });
   const cards = selectableCards().filter((c) => c.category !== 'Spell' && c.modelId);
   const manifest: Record<string, string> = {};
   const done = new Set<string>();
+  const recipes = new Set<string>();
+  const outlines: Array<{ id: string; grid: number[] }> = [];
   let made = 0;
   let missing = 0;
   let skipped = 0;
+  let rerolled = 0;
 
   for (const card of cards) {
     const spec = MODELS[card.modelId];
@@ -530,17 +707,56 @@ function build(): void {
       continue;
     }
 
-    const layers = layersFor(card.modelId, spec);
-    if (layers.length === 0) {
+    /*
+     * Re-roll until this card's recipe is one no other card already has.
+     *
+     * Seven pairs of cards were composing to visually identical figures before
+     * the pools went in, and two still collided afterwards. Retrying is the
+     * only version of this that is a guarantee rather than a hope.
+     */
+    /*
+     * Re-roll until this card looks like no card already built.
+     *
+     * Checked twice, cheap first: a recipe already taken cannot produce a
+     * different picture, so that is rejected without composing anything. Then
+     * the composed outline is compared against every figure accepted so far,
+     * because a distinct recipe is not the same claim as a distinct figure and
+     * the difference is where the duplicates were hiding.
+     */
+    let atlas: ReturnType<typeof composeAtlas> | null = null;
+    let accepted = '';
+    let shape: number[] = [];
+    for (let attempt = 0; attempt < 24; attempt++) {
+      const built = layersFor(card.modelId, spec, attempt);
+      if (built.layers.length === 0) break;
+      if (recipes.has(built.recipe)) {
+        rerolled++;
+        continue;
+      }
+      const composed = composeAtlas({
+        layers: built.layers,
+        walkFrames: WALK_FRAMES,
+        strikeFrames: STRIKE_FRAMES,
+      });
+      const grid = outline(composed as { width: number; data: Buffer });
+      const clash = outlines.find((o) => similarity(o.grid, grid) >= TOO_ALIKE);
+      if (clash) {
+        rerolled++;
+        recipes.add(built.recipe);
+        continue;
+      }
+      atlas = composed;
+      accepted = built.recipe;
+      shape = grid;
+      break;
+    }
+
+    if (!atlas) {
       missing++;
       continue;
     }
-
-    const atlas = composeAtlas({
-      layers,
-      walkFrames: WALK_FRAMES,
-      strikeFrames: STRIKE_FRAMES,
-    });
+    recipes.add(accepted);
+    outlines.push({ id: card.modelId, grid: shape });
     const file = `${card.modelId}.png`;
     writeFileSync(`${OUT}/${file}`, encode(atlas));
     manifest[card.modelId] = file;
@@ -553,7 +769,7 @@ function build(): void {
   );
   console.log(
     `wrote ${made} atlases for ${cards.length} cards ` +
-      `(${missing} with no layers, ${skipped} drawn as animals)`,
+      `(${missing} with no layers, ${skipped} drawn as animals, ${rerolled} re-rolled for distinctness)`,
   );
   if (!existsSync(`${OUT}/manifest.json`)) throw new Error('manifest not written');
 }
