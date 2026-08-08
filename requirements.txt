@@ -1,0 +1,8 @@
+# Core — everything needed for the free path (captions + heuristic ranking).
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pydantic>=2.7
+yt-dlp>=2025.1.15
+
+# Optional: Claude re-ranking. Only used when CLASH_RANKER=llm.
+anthropic>=0.69
