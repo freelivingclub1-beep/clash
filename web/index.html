@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0d0f13" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Clash" />
+<link rel="manifest" href="/manifest.webmanifest" />
+<link rel="apple-touch-icon" href="/icon.svg" />
+<title>Clash — auto clip finder</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230d0f13'/%3E%3Cpath d='M12 9l11 7-11 7z' fill='%23ffe24b'/%3E%3C/svg%3E" />
+<link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="dot"></span>
+    <h1>Clash</h1>
+    <span class="tag">self-hosted clip finder</span>
+  </div>
+  <div class="topbarRight">
+    <div id="capabilities" class="caps"></div>
+    <button id="logout" class="ghost hidden" type="button">Sign out</button>
+  </div>
+</header>
+
+<main>
+  <section class="panel">
+    <label class="field">
+      <span>Paste a video link</span>
+      <div class="row">
+        <input id="url" type="url" inputmode="url" enterkeyhint="go" placeholder="https://www.youtube.com/watch?v=…" autocomplete="off" />
+        <button id="analyze" class="primary">Find clips</button>
+      </div>
+    </label>
+
+    <details class="options">
+      <summary>Options</summary>
+      <div class="grid">
+        <label class="field">
+          <span>Ranking</span>
+          <select id="ranker">
+            <option value="heuristic">Heuristic — free, offline</option>
+            <option value="llm">Claude — needs an API key</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Transcript</span>
+          <select id="transcribe">
+            <option value="auto">Auto — captions, else Whisper</option>
+            <option value="youtube">YouTube captions only</option>
+            <option value="whisper">Whisper (local)</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Clips to return</span>
+          <input id="maxResults" type="number" min="1" max="40" value="12" />
+        </label>
+        <label class="field">
+          <span>Aspect</span>
+          <select id="aspect">
+            <option value="vertical">9:16 — crop</option>
+            <option value="vertical_blur">9:16 — blurred background</option>
+            <option value="square">1:1 square</option>
+            <option value="original">Keep original</option>
+          </select>
+        </label>
+        <label class="check">
+          <input id="faceTrack" type="checkbox" />
+          <span>Track the speaker <small id="faceTrackNote"></small></span>
+        </label>
+      </div>
+
+      <div class="grid">
+        <label class="check">
+          <input id="capEnabled" type="checkbox" checked />
+          <span>Burn in jumping captions</span>
+        </label>
+        <label class="field">
+          <span>Caption style</span>
+          <select id="capStyle">
+            <option value="pop">Pop — phrase, word highlights</option>
+            <option value="single">Single — one word at a time</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Highlight colour</span>
+          <input id="capAccent" type="color" value="#FFE24B" />
+        </label>
+        <label class="check">
+          <input id="capUpper" type="checkbox" checked />
+          <span>Uppercase</span>
+        </label>
+      </div>
+    </details>
+
+    <div id="status" class="status hidden">
+      <div class="bar"><div id="bar" class="fill"></div></div>
+      <p id="statusText"></p>
+    </div>
+    <p id="error" class="error hidden"></p>
+  </section>
+
+  <section id="summary" class="summary hidden"></section>
+  <section id="results" class="results"></section>
+</main>
+
+<template id="clipCard">
+  <article class="card">
+    <div class="cardHead">
+      <div class="score"><strong class="scoreValue"></strong><small>score</small></div>
+      <div class="meta">
+        <h3 class="title"></h3>
+        <p class="times"></p>
+        <p class="reason"></p>
+      </div>
+    </div>
+    <p class="excerpt"></p>
+    <div class="cardActions">
+      <button class="render">Render clip</button>
+      <span class="renderStatus"></span>
+    </div>
+    <div class="output hidden">
+      <video controls playsinline preload="metadata"></video>
+      <a class="download" download>Download</a>
+    </div>
+  </article>
+</template>
+
+<script src="/app.js"></script>
+</body>
+</html>

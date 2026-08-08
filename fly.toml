@@ -1,0 +1,41 @@
+# Fly.io deployment.  Full walkthrough in README.md → "Putting it on the internet".
+#
+#   fly launch --no-deploy --copy-config
+#   fly volume create clash_data --size 10
+#   fly secrets set CLASH_PASSWORD='pick-something-long'
+#   fly deploy
+#
+app = "clash"
+primary_region = "lhr"          # change to a region near you
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  CLASH_DATA_DIR = "/data"
+  CLASH_BEHIND_TLS = "1"        # Fly terminates TLS in front of the app
+  CLASH_MAX_DISK_GB = "8"
+  CLASH_SOURCE_TTL_HOURS = "6"
+  CLASH_CLIP_TTL_HOURS = "12"
+
+[[mounts]]
+  source = "clash_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  # Encoding is CPU-bound and jobs live in memory, so the machine must stay up
+  # while a render is in flight. Stopping it mid-job would lose the job.
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.http_options]
+    # A long render streams no bytes for a while; don't let the edge time it out.
+    idle_timeout = 900
+
+[[vm]]
+  # Video encoding wants cores. 1 CPU works but a 60s clip takes a few minutes.
+  size = "performance-2x"
+  memory = "4gb"

@@ -1,0 +1,4 @@
+# Optional: local transcription. Needed when a video has no caption track, or
+# when you want cleaner punctuation and word timings than YouTube's auto-captions.
+# CPU works; a CUDA GPU is roughly 10x faster.
+faster-whisper>=1.1.0

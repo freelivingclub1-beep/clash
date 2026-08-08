@@ -1,0 +1,28 @@
+# Run Clash on any box with Docker:  docker compose up -d
+services:
+  clash:
+    build: .
+    # Or skip the build and use a prebuilt image you pushed:
+    # image: ghcr.io/you/clash:latest
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # REQUIRED on anything reachable from the internet. Without it the
+      # instance is open to whoever finds the URL.
+      CLASH_PASSWORD: "${CLASH_PASSWORD:?set CLASH_PASSWORD before starting}"
+      # Set when a reverse proxy (Caddy, nginx, Cloudflare) terminates HTTPS.
+      CLASH_BEHIND_TLS: "1"
+      # Housekeeping: hosted disks are small and source videos are large.
+      CLASH_MAX_DISK_GB: "8"
+      CLASH_SOURCE_TTL_HOURS: "6"
+      CLASH_CLIP_TTL_HOURS: "12"
+      CLASH_MAX_SOURCE_MINUTES: "240"
+      # Optional: Claude ranking. Leave unset for the free heuristic ranker.
+      # ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      # CLASH_RANKER: "llm"
+    volumes:
+      - clash-data:/data
+
+volumes:
+  clash-data:
