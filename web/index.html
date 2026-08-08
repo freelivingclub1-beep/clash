@@ -52,11 +52,15 @@
         <label class="field">
           <span>Aspect</span>
           <select id="aspect">
-            <option value="vertical">9:16 — crop to centre</option>
+            <option value="vertical">9:16 — crop</option>
             <option value="vertical_blur">9:16 — blurred background</option>
             <option value="square">1:1 square</option>
             <option value="original">Keep original</option>
           </select>
+        </label>
+        <label class="check">
+          <input id="faceTrack" type="checkbox" />
+          <span>Track the speaker <small id="faceTrackNote"></small></span>
         </label>
       </div>
 

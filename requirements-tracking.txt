@@ -1,0 +1,10 @@
+# Optional: face tracking, so the 9:16 crop follows the speaker instead of
+# sitting in the middle of the frame. Uses the Haar cascades bundled inside the
+# opencv wheel — nothing extra to download.
+# Pinned below 5.0 deliberately: OpenCV 5 removed the Haar cascade API, and its
+# replacement (YuNet) needs a model file that is not shipped in the wheel. On 4.x
+# everything needed is bundled, so tracking works straight after install.
+# If you are already on OpenCV 5, tracking still works — point CLASH_FACE_MODEL
+# at a YuNet .onnx file (see README).
+opencv-python-headless>=4.8,<5
+numpy>=1.24

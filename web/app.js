@@ -7,6 +7,8 @@ const els = {
   transcribe: $("transcribe"),
   maxResults: $("maxResults"),
   aspect: $("aspect"),
+  faceTrack: $("faceTrack"),
+  faceTrackNote: $("faceTrackNote"),
   capEnabled: $("capEnabled"),
   capStyle: $("capStyle"),
   capAccent: $("capAccent"),
@@ -125,6 +127,7 @@ function buildCard(clip, videoId) {
           video_id: videoId,
           clip_id: clip.id,
           aspect: els.aspect.value,
+          face_track: els.faceTrack.checked,
           captions: captionPayload(),
         }),
       });
@@ -193,6 +196,7 @@ async function loadCapabilities() {
     const items = [
       ["ffmpeg", health.ffmpeg],
       ["whisper", health.whisper],
+      ["face tracking", health.face_tracking],
       ["claude", health.claude],
     ];
     els.capabilities.innerHTML = "";
@@ -204,6 +208,13 @@ async function loadCapabilities() {
     }
     els.ranker.value = health.default_ranker;
     els.transcribe.value = health.default_transcribe;
+
+    // Tracking needs opencv; disable the toggle rather than let a render
+    // silently fall back to a centre crop.
+    els.faceTrack.disabled = !health.face_tracking;
+    els.faceTrackNote.textContent = health.face_tracking
+      ? ""
+      : "— install requirements-tracking.txt";
   } catch {
     /* capability strip is decorative — a failure here shouldn't block the UI */
   }

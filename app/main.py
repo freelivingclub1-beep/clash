@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import captions as captions_mod
-from . import config, jobs, pipeline, render
+from . import config, jobs, pipeline, render, tracking
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 
@@ -43,6 +43,7 @@ class RenderRequest(BaseModel):
     video_id: str
     clip_id: str
     aspect: str = "vertical"
+    face_track: bool = False
     captions: CaptionOptions = Field(default_factory=CaptionOptions)
     crf: int = 20
     preset: str = "veryfast"
@@ -64,6 +65,7 @@ def health() -> dict[str, Any]:
         "ok": True,
         "ffmpeg": config.ffmpeg_available(),
         "whisper": config.whisper_available(),
+        "face_tracking": tracking.available(),
         "claude": config.anthropic_available(),
         "default_ranker": config.RANKER,
         "default_transcribe": config.TRANSCRIBE_MODE,
@@ -106,6 +108,7 @@ def render_clip(request: RenderRequest) -> dict[str, Any]:
         crf=request.crf,
         preset=request.preset,
         normalize_audio=request.normalize_audio,
+        face_track=request.face_track,
     )
     style = captions_mod.CaptionStyle(
         style=request.captions.style,

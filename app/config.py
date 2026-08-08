@@ -46,6 +46,10 @@ FFPROBE = os.getenv("CLASH_FFPROBE", "ffprobe")
 FONTS_DIR = os.getenv("CLASH_FONTS_DIR", "")
 CAPTION_FONT = os.getenv("CLASH_CAPTION_FONT", "DejaVu Sans")
 
+# Optional YuNet .onnx face model. Only needed on OpenCV 5, which dropped the
+# bundled Haar cascades; on OpenCV 4 face tracking works with no model file.
+FACE_MODEL = os.getenv("CLASH_FACE_MODEL", "")
+
 # How many candidate clips to surface.
 MAX_RESULTS = int(os.getenv("CLASH_MAX_RESULTS", "12"))
 # Fraction of overlap above which two candidates are considered the same clip.

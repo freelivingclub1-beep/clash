@@ -29,6 +29,9 @@ class RenderOptions:
     preset: str = "veryfast"
     normalize_audio: bool = True
     target_height: int = 1920
+    # Follow the speaker instead of cropping to the middle of the frame. Only
+    # meaningful for the cropping aspects; ignored for blur and original.
+    face_track: bool = False
 
 
 class RenderError(RuntimeError):
@@ -82,8 +85,17 @@ def escape_for_filter(path: Path | str) -> str:
     return text
 
 
+def crops_to_frame(aspect: str) -> bool:
+    """True for the aspects that discard part of the frame, so tracking helps."""
+    return aspect in {"vertical", "square"}
+
+
 def build_video_filter(
-    out_w: int, out_h: int, options: RenderOptions, ass_path: Path | None
+    out_w: int,
+    out_h: int,
+    options: RenderOptions,
+    ass_path: Path | None,
+    crop_path: "object | None" = None,
 ) -> str:
     burn = f",ass={escape_for_filter(ass_path)}" if ass_path else ""
 
@@ -100,9 +112,20 @@ def build_video_filter(
     if options.aspect == "original":
         return f"[0:v]scale={out_w}:{out_h},setsar=1{burn}[v]"
 
+    # Without a track the crop sits in the middle; with one, x and y follow the
+    # speaker. The expressions are quoted so their commas are not read as
+    # filtergraph separators.
+    if crop_path is not None:
+        crop = (
+            f"crop=w={out_w}:h={out_h}"
+            f":x='{crop_path.x_expr}':y='{crop_path.y_expr}'"
+        )
+    else:
+        crop = f"crop={out_w}:{out_h}"
+
     return (
         f"[0:v]scale={out_w}:{out_h}:force_original_aspect_ratio=increase,"
-        f"crop={out_w}:{out_h},setsar=1{burn}[v]"
+        f"{crop},setsar=1{burn}[v]"
     )
 
 
@@ -133,7 +156,9 @@ def render_clip(
     options: RenderOptions | None = None,
     ass_path: Path | None = None,
     on_progress: Progress | None = None,
+    crop_path: "object | None" = None,
 ) -> Path:
+    """Render one clip. Pass ``crop_path`` to reuse an already-computed track."""
     options = options or RenderOptions()
     duration = max(0.1, end - start)
     src_w, src_h = probe_dimensions(source)
@@ -141,7 +166,30 @@ def render_clip(
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    video_filter = build_video_filter(out_w, out_h, options, ass_path if options.captions else None)
+    if crop_path is None and options.face_track and crops_to_frame(options.aspect):
+        from . import tracking
+
+        if on_progress:
+            on_progress(0.0, "Tracking the speaker")
+        try:
+            crop_path = tracking.track_clip(
+                source, start, duration, src_w, src_h, out_w, out_h
+            )
+            if on_progress:
+                on_progress(
+                    0.0,
+                    f"Tracked ({crop_path.detection_rate:.0%} of frames, "
+                    f"{crop_path.keyframes} moves)",
+                )
+        except tracking.TrackingUnavailable as exc:
+            # Tracking is an enhancement; a clip that renders centred is far
+            # better than no clip at all.
+            if on_progress:
+                on_progress(0.0, f"Centre crop — {exc}")
+
+    video_filter = build_video_filter(
+        out_w, out_h, options, ass_path if options.captions else None, crop_path
+    )
 
     cmd = [
         config.FFMPEG, "-y", "-hide_banner", "-loglevel", "error",

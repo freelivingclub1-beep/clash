@@ -80,6 +80,7 @@ def cmd_clip(args: argparse.Namespace) -> int:
         captions=not args.no_captions,
         crf=args.crf,
         preset=args.preset,
+        face_track=args.face_track,
     )
     style = captions_mod.CaptionStyle(
         style=args.caption_style,
@@ -123,6 +124,10 @@ def main() -> int:
     p_clip.add_argument("--caption-style", choices=["pop", "single"], default="pop")
     p_clip.add_argument("--accent", default="#FFE24B", help="Highlight colour, #RRGGBB")
     p_clip.add_argument("--font", default=config.CAPTION_FONT)
+    p_clip.add_argument(
+        "--face-track", action="store_true",
+        help="Follow the speaker instead of cropping to the centre",
+    )
     p_clip.add_argument("--no-captions", action="store_true")
     p_clip.add_argument("--no-uppercase", action="store_true")
     p_clip.add_argument("--crf", type=int, default=20)

@@ -48,6 +48,17 @@ export CLASH_TRANSCRIBE=whisper          # or leave on "auto" as a fallback
 export CLASH_WHISPER_MODEL=small         # tiny | base | small | medium | large-v3
 ```
 
+**Face tracking** — so the 9:16 crop follows the speaker instead of sitting in
+the middle of the frame:
+
+```bash
+pip install -r requirements-tracking.txt
+python cli.py clip "https://youtu.be/VIDEO_ID" --face-track
+```
+
+In the web UI it's the "Track the speaker" checkbox. Nothing to download — the
+detector ships inside the OpenCV wheel.
+
 **Claude ranking** — the heuristic scorer finds well-bounded, self-contained
 moments; Claude is better at judging which of them a viewer would actually stop
 for, and writes the titles:
@@ -97,6 +108,7 @@ Every setting is an environment variable.
 | `CLASH_MAX_RESULTS` | `12` | Clips returned per video |
 | `CLASH_MAX_HEIGHT` | `1080` | Cap on downloaded source resolution |
 | `CLASH_CAPTION_FONT` | `DejaVu Sans` | Any font installed on the system |
+| `CLASH_FACE_MODEL` | – | YuNet `.onnx` path; only needed on OpenCV 5 |
 | `CLASH_FONTS_DIR` | – | Extra font directory for libass |
 | `CLASH_DATA_DIR` | `./data` | Where sources, clips and caches live |
 
@@ -120,6 +132,42 @@ Filler words subtract. Overlapping winners are then suppressed so the results
 are distinct moments rather than twelve variations on the same minute.
 
 The weights live in `app/score.py` as a plain dict — tune them for your niche.
+
+## Face tracking
+
+Off by default; enable per render. Only applies to the cropping aspects
+(`vertical`, `square`) — the blurred-background and original modes keep the
+whole frame, so there is nothing to track towards.
+
+Recentring the crop on every detection looks like camera shake, so the path is
+built the way an editor would cut it — hold, move deliberately, hold:
+
+1. Sample 4 frames/sec and detect faces (downscaled to 720px for speed).
+2. With several faces on screen, prefer the one already being followed rather
+   than always the largest, so the crop doesn't ping-pong between speakers.
+3. Median-filter out single-frame misdetections, then smooth with a centred
+   moving average — symmetric, so it adds no lag and reproduces a real pan
+   exactly, ends included.
+4. Simplify the path (Ramer–Douglas–Peucker) into at most 24 keyframes. A
+   speaker who barely moves collapses to a single static framing.
+5. Emit those keyframes as a piecewise-linear ffmpeg crop expression, so the
+   move happens inside the existing encode pass — no second pass, no extra time.
+
+Faces are placed slightly above centre for headroom. If a face is found in
+fewer than 15% of sampled frames the track is rejected and the render falls back
+to a centre crop, with the reason reported in the progress line — you get a
+centred clip rather than an error.
+
+Detection is Haar cascades, which are bundled in OpenCV 4. **OpenCV 5 removed
+that API**, which is why `requirements-tracking.txt` pins `<5`. If you are
+already on OpenCV 5, download a [YuNet](https://github.com/opencv/opencv_zoo)
+`.onnx` model and set `CLASH_FACE_MODEL` to its path — the code picks it up
+automatically and it detects better than Haar.
+
+Haar is fast and dependency-free but it is a 2001-era detector: it wants
+reasonably frontal, reasonably lit faces. Heavy profile turns, low light or
+faces smaller than ~3.5% of frame width will drop detections. The smoothing
+tolerates gaps, but for difficult footage the YuNet path is worth the download.
 
 ## Captions
 
@@ -148,6 +196,7 @@ app/
   score.py       the heuristic viral scorer
   llm.py         optional Claude re-ranking
   captions.py    ASS karaoke caption builder
+  tracking.py    face detection, path smoothing, crop keyframes
   render.py      ffmpeg cut / reframe / burn-in
   pipeline.py    the end-to-end orchestration
   jobs.py        background job registry for the web UI
@@ -159,8 +208,8 @@ cli.py           terminal front end
 ## Notes and limits
 
 - Analysis works without ffmpeg; rendering does not.
-- Reframing crops to centre. There's no face tracking, so an off-centre speaker
-  will sit off-centre — use `--aspect vertical_blur` when that matters.
+- Face tracking follows one subject. For a two-person interview where both
+  should stay visible, `--aspect vertical_blur` keeps the whole frame instead.
 - YouTube periodically tightens access to auto-captions. When the caption fetch
   fails, `auto` mode falls back to Whisper, which is why installing it is worth
   doing even if you rarely use it.

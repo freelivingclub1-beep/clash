@@ -96,6 +96,8 @@ button.primary:hover:not(:disabled) { background: #ffea79; }
 }
 .check { display: flex; align-items: center; gap: 9px; font-size: 14px; align-self: end; padding-bottom: 12px; }
 .check input { width: 17px; height: 17px; accent-color: var(--accent); }
+.check input:disabled { cursor: not-allowed; }
+.check small { color: var(--muted); font-size: 12px; }
 
 .status { margin-top: 18px; }
 .bar { height: 6px; background: var(--panel-2); border-radius: 999px; overflow: hidden; }
