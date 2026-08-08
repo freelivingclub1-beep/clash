@@ -20,6 +20,7 @@ const els = {
   summary: $("summary"),
   results: $("results"),
   capabilities: $("capabilities"),
+  logout: $("logout"),
 };
 
 let analysis = null;
@@ -53,6 +54,12 @@ async function api(path, options) {
     headers: { "Content-Type": "application/json" },
     ...options,
   });
+  if (response.status === 401) {
+    // Session expired mid-session — bounce to the login page rather than
+    // leaving the user staring at a generic failure.
+    location.href = `/login?next=${encodeURIComponent(location.pathname)}`;
+    throw new Error("Session expired.");
+  }
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
     throw new Error(body.detail || `Request failed (${response.status})`);
@@ -211,6 +218,7 @@ async function loadCapabilities() {
 
     // Tracking needs opencv; disable the toggle rather than let a render
     // silently fall back to a centre crop.
+    els.logout.classList.toggle("hidden", !health.auth_required);
     els.faceTrack.disabled = !health.face_tracking;
     els.faceTrackNote.textContent = health.face_tracking
       ? ""
@@ -219,6 +227,11 @@ async function loadCapabilities() {
     /* capability strip is decorative — a failure here shouldn't block the UI */
   }
 }
+
+els.logout.addEventListener("click", async () => {
+  await fetch("/api/logout", { method: "POST" });
+  location.href = "/login";
+});
 
 els.analyze.addEventListener("click", analyze);
 els.url.addEventListener("keydown", (event) => {

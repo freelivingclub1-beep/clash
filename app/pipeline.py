@@ -43,6 +43,14 @@ def analyze(
     url = ingest.normalize_url(url)
     source = ingest.probe(url)
 
+    ceiling = config.MAX_SOURCE_MINUTES * 60
+    if ceiling and source.duration > ceiling:
+        raise RuntimeError(
+            f"That video is {source.duration / 60:.0f} minutes long; this instance "
+            f"accepts up to {config.MAX_SOURCE_MINUTES}. Raise CLASH_MAX_SOURCE_MINUTES "
+            "to allow longer ones."
+        )
+
     report(0.08, "Checking for a caption track")
     caption_path = None
     if (transcribe_mode or config.TRANSCRIBE_MODE) in {"auto", "youtube"}:

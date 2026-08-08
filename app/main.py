@@ -2,21 +2,96 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from . import auth
 from . import captions as captions_mod
-from . import config, jobs, pipeline, render, tracking
+from . import config, jobs, pipeline, render, storage, tracking
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
+log = logging.getLogger("clash")
 
-app = FastAPI(title="Clash", description="Self-hosted viral clip finder", version="1.0")
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    storage.start_reaper()
+    if not auth.enabled():
+        log.warning(
+            "CLASH_PASSWORD is not set — this instance is open to anyone who "
+            "reaches it. Fine on your own machine; set it before exposing a URL. "
+            "Suggested value: %s",
+            auth.suggest_password(),
+        )
+    yield
+
+
+app = FastAPI(
+    title="Clash",
+    description="Self-hosted viral clip finder",
+    version="1.0",
+    lifespan=lifespan,
+)
+
+# Reachable without a session: the login flow itself, the assets that render it,
+# and the health probe hosting platforms call before routing traffic.
+PUBLIC_PATHS = {
+    "/login", "/api/login", "/api/health", "/styles.css", "/favicon.ico",
+}
+
+
+@app.middleware("http")
+async def require_session(request: Request, call_next):
+    if not auth.enabled() or request.url.path in PUBLIC_PATHS:
+        return await call_next(request)
+
+    if auth.verify_token(request.cookies.get(auth.COOKIE)):
+        return await call_next(request)
+
+    if request.url.path.startswith("/api/"):
+        return JSONResponse(status_code=401, content={"detail": "Sign in again."})
+    return RedirectResponse(f"/login?next={request.url.path}", status_code=302)
+
+
+class LoginRequest(BaseModel):
+    password: str = ""
+
+
+@app.post("/api/login")
+def login(request: LoginRequest) -> JSONResponse:
+    if not auth.check_password(request.password):
+        raise HTTPException(401, "Wrong password.")
+    response = JSONResponse({"ok": True})
+    response.set_cookie(
+        auth.COOKIE,
+        auth.issue_token(),
+        max_age=auth.DEFAULT_TTL_HOURS * 3600,
+        httponly=True,
+        samesite="lax",
+        # Hosting platforms terminate TLS in front of the app, so the request
+        # arriving here looks like plain HTTP; key off the forwarded scheme.
+        secure=config.BEHIND_TLS,
+    )
+    return response
+
+
+@app.post("/api/logout")
+def logout() -> JSONResponse:
+    response = JSONResponse({"ok": True})
+    response.delete_cookie(auth.COOKIE)
+    return response
+
+
+@app.get("/login")
+def login_page() -> FileResponse:
+    return FileResponse(WEB_DIR / "login.html")
 
 
 class AnalyzeRequest(BaseModel):
@@ -67,6 +142,9 @@ def health() -> dict[str, Any]:
         "whisper": config.whisper_available(),
         "face_tracking": tracking.available(),
         "claude": config.anthropic_available(),
+        "auth_required": auth.enabled(),
+        "storage": storage.usage(),
+        "max_source_minutes": config.MAX_SOURCE_MINUTES,
         "default_ranker": config.RANKER,
         "default_transcribe": config.TRANSCRIBE_MODE,
         "min_clip_seconds": config.MIN_CLIP_SECONDS,

@@ -50,6 +50,18 @@ CAPTION_FONT = os.getenv("CLASH_CAPTION_FONT", "DejaVu Sans")
 # bundled Haar cascades; on OpenCV 4 face tracking works with no model file.
 FACE_MODEL = os.getenv("CLASH_FACE_MODEL", "")
 
+# --- hosting -----------------------------------------------------------------
+# Longest source video accepted. Guards a shared instance against someone
+# pasting a 12-hour livestream and pinning the CPU for an hour.
+MAX_SOURCE_MINUTES = int(os.getenv("CLASH_MAX_SOURCE_MINUTES", "240"))
+# Retention. Hosted disks are small and source videos are large.
+CLIP_TTL_HOURS = float(os.getenv("CLASH_CLIP_TTL_HOURS", "12"))
+SOURCE_TTL_HOURS = float(os.getenv("CLASH_SOURCE_TTL_HOURS", "6"))
+MAX_DISK_BYTES = int(float(os.getenv("CLASH_MAX_DISK_GB", "8")) * 1e9)
+# Set when a proxy in front of the app terminates TLS, so the session cookie is
+# marked Secure even though this process only ever sees http://.
+BEHIND_TLS = os.getenv("CLASH_BEHIND_TLS", "").lower() in {"1", "true", "yes"}
+
 # How many candidate clips to surface.
 MAX_RESULTS = int(os.getenv("CLASH_MAX_RESULTS", "12"))
 # Fraction of overlap above which two candidates are considered the same clip.

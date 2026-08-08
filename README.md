@@ -133,6 +133,74 @@ are distinct moments rather than twelve variations on the same minute.
 
 The weights live in `app/score.py` as a plain dict — tune them for your niche.
 
+## Putting it on the internet
+
+Clash ships as a container, so anything that runs Docker will host it. Two
+things are non-negotiable before you expose a URL:
+
+- **Set `CLASH_PASSWORD`.** Without it, every visitor can drive a video
+  downloader and a CPU-heavy encoder on your bill. The app logs a warning and
+  suggests a password when it starts without one.
+- **Give it a disk and a cap.** Source videos are hundreds of megabytes. The
+  built-in reaper expires clips and sources on a timer and evicts the oldest
+  first if `CLASH_MAX_DISK_GB` is exceeded.
+
+### Fly.io (the config is in the repo)
+
+```bash
+fly launch --no-deploy --copy-config      # uses the bundled fly.toml
+fly volume create clash_data --size 10
+fly secrets set CLASH_PASSWORD='pick-something-long'
+fly deploy
+```
+
+Then open the URL Fly prints, enter the password, and on a phone use
+**Share → Add to Home Screen** so it opens like an installed app.
+
+### Any box with Docker
+
+```bash
+export CLASH_PASSWORD='pick-something-long'
+docker compose up -d          # serves on :8000
+```
+
+Put a reverse proxy with HTTPS in front (Caddy does it in two lines), and set
+`CLASH_BEHIND_TLS=1` so the session cookie is marked Secure.
+
+### What to expect from a hosted box
+
+Encoding is the whole cost. On a 1-core instance a 60-second captioned clip
+takes a few minutes; on 2–4 cores it is well under a minute. This is why
+`fly.toml` asks for `performance-2x` — a shared-CPU instance works but tests
+your patience.
+
+Two settings matter more than the rest:
+
+- `auto_stop_machines` is **off** on purpose. Jobs live in the app's memory, so
+  a machine that sleeps mid-render loses the job.
+- Run **one** worker. A second uvicorn worker gets its own memory and cannot
+  see the first one's jobs, so polling would fail at random. Scale by adding
+  cores, not workers.
+
+Free tiers that sleep after inactivity or give you an ephemeral disk will
+technically run Clash and frustrate you constantly. Budget ~$5–10/month for
+something that reliably encodes video.
+
+### Hosted-only settings
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `CLASH_PASSWORD` | – | Enables the login gate. **Set this on any public URL.** |
+| `CLASH_SECRET` | derived | Session signing key. Defaults to a value derived from the password, so changing the password signs everyone out. |
+| `CLASH_BEHIND_TLS` | `0` | Set to `1` when a proxy terminates HTTPS, so the cookie is Secure. |
+| `CLASH_MAX_SOURCE_MINUTES` | `240` | Longest video accepted |
+| `CLASH_MAX_DISK_GB` | `8` | Total data cap before the oldest files are evicted |
+| `CLASH_SOURCE_TTL_HOURS` | `6` | How long downloaded sources are kept |
+| `CLASH_CLIP_TTL_HOURS` | `12` | How long rendered clips are kept — **download the ones you want** |
+
+Note that last one: rendered clips are deleted after 12 hours by default. It
+is a scratch space, not a library.
+
 ## Face tracking
 
 Off by default; enable per render. Only applies to the cropping aspects
@@ -200,9 +268,13 @@ app/
   render.py      ffmpeg cut / reframe / burn-in
   pipeline.py    the end-to-end orchestration
   jobs.py        background job registry for the web UI
+  auth.py        password gate for public deployments
+  storage.py     disk retention and eviction
   main.py        FastAPI routes
-web/             single-page front end
+web/             single-page front end (installable as a phone app)
 cli.py           terminal front end
+Dockerfile       the hosted image
+docker-compose.yml / fly.toml   deploy configs
 ```
 
 ## Notes and limits
