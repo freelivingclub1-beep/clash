@@ -40,6 +40,9 @@ function readUrl() {
   return patch;
 }
 
+/** Camera preset index, so a shared link opens on the angle you meant. */
+const startView = Number(new URLSearchParams(location.search ?? '').get('view')) || 0;
+
 /**
  * `?model=<url>` points the loader at any glTF without touching the source.
  * Since real vehicle assets can't be shipped with the demo, this is how you
@@ -51,6 +54,8 @@ function writeUrl(state) {
   const q = new URLSearchParams();
   for (const key of URL_KEYS) q.set(key, state[key]);
   if (state.includeSavings) q.set('savings', '1');
+  q.set('view', String(viewIndex));
+  if (modelOverride) q.set('model', modelOverride);
   try {
     history.replaceState(null, '', `${location.pathname}?${q}`);
   } catch {
@@ -216,8 +221,9 @@ addEventListener('keydown', (e) => {
 
 rebuildCar();
 panel.update(state, vehicle);
-dots.update(0);
-stage.jumpTo(views.hero.pose);
+viewIndex = ((startView % dotViews.length) + dotViews.length) % dotViews.length;
+dots.update(viewIndex);
+stage.jumpTo(dotViews[viewIndex].pose);
 stage.start();
 
 requestAnimationFrame(() => document.body.classList.add('ready'));
