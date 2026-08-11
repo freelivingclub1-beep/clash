@@ -1,0 +1,14 @@
+{
+  "name": "cybercab-configurator",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A Cybercab-style 3D car configurator, with the car generated in code",
+  "scripts": {
+    "start": "python3 -m http.server 8080",
+    "build": "node build.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}

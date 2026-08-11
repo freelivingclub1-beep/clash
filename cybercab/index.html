@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Tesla-style 3D configurator — Model 3, Model Y, Cybercab</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "./vendor/three/three.module.min.js"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div class="banner">
+      <span>Unofficial demo &middot; not affiliated with Tesla &middot; all prices and figures invented</span>
+    </div>
+
+    <div class="layout">
+      <div class="stage-wrap">
+        <div id="stage"></div>
+        <p class="badge" id="badge" hidden>
+          Placeholder body &mdash; drop a licensed glTF into <code>models/</code> to replace it
+        </p>
+        <p class="hint">Drag to rotate &middot; scroll to zoom &middot; arrow keys change view</p>
+        <div id="viewbar"></div>
+      </div>
+      <aside id="panel"></aside>
+    </div>
+
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>

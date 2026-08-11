@@ -1,0 +1,684 @@
+/* Configurator chrome. The 3D view owns the left two-thirds; the panel is a
+   plain scrolling column, because the moment it starts competing with the
+   render for attention the page stops looking like a product page. */
+
+:root {
+  --bg: #fdfdfe;
+  --studio-a: #f2f4f7;
+  --studio-b: #d5d9de;
+  --studio-c: #b4bac2;
+  --ink: #14171b;
+  --ink-soft: #59616a;
+  --ink-faint: #878f99;
+  --line: #e1e5ea;
+  --panel: #ffffff;
+  --chip: #f1f3f6;
+  --accent: #2f5db3;
+  --accent-ink: #ffffff;
+  --banner: #f5f1e4;
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 8px 24px rgba(16, 24, 40, 0.07);
+}
+
+:root:not([data-theme='light']) {
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #0b0d10;
+    --studio-a: #24282e;
+    --studio-b: #14171b;
+    --studio-c: #08090b;
+    --ink: #eceff3;
+    --ink-soft: #a2aab4;
+    --ink-faint: #737b85;
+    --line: #23272d;
+    --panel: #111417;
+    --chip: #1a1e23;
+    --accent: #5b8cef;
+    --accent-ink: #06090d;
+    --banner: #1c1a13;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.45);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme='dark'] {
+  --bg: #0b0d10;
+  --studio-a: #24282e;
+  --studio-b: #14171b;
+  --studio-c: #08090b;
+  --ink: #eceff3;
+  --ink-soft: #a2aab4;
+  --ink-faint: #737b85;
+  --line: #23272d;
+  --panel: #111417;
+  --chip: #1a1e23;
+  --accent: #5b8cef;
+  --accent-ink: #06090d;
+  --banner: #1c1a13;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.45);
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 15px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+.banner {
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: var(--banner);
+  color: var(--ink-soft);
+  font-size: 12.5px;
+  letter-spacing: 0.01em;
+  border-bottom: 1px solid var(--line);
+}
+
+.banner a {
+  color: inherit;
+}
+
+.layout {
+  display: flex;
+  height: calc(100% - 34px);
+  min-height: 0;
+}
+
+/* ---------- Stage ---------- */
+
+.stage-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background:
+    radial-gradient(120% 90% at 50% 8%, var(--studio-a) 0%, var(--studio-b) 58%, var(--studio-c) 100%);
+}
+
+#stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  touch-action: none;
+}
+
+#stage canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  opacity: 0;
+  transition: opacity 0.6s ease;
+}
+
+body.ready #stage canvas {
+  opacity: 1;
+}
+
+#stage canvas.grabbing {
+  cursor: grabbing;
+}
+
+/* Sits above the dot strip, not on top of it: `bottom` here resolves against
+   .stage-wrap, which includes the view bar. */
+.hint {
+  position: absolute;
+  left: 50%;
+  bottom: 64px;
+  transform: translateX(-50%);
+  font-size: 12px;
+  color: var(--ink-faint);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.5s ease 0.8s;
+}
+
+body.ready .hint {
+  opacity: 1;
+}
+
+/* ---------- View dots ---------- */
+
+#viewbar {
+  flex: 0 0 auto;
+  padding: 0 0 22px;
+}
+
+.view-dots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+
+.view-arrow {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.view-arrow:hover {
+  color: var(--ink);
+  border-color: var(--ink-faint);
+}
+
+.dots {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--ink-faint);
+  opacity: 0.42;
+  cursor: pointer;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.dot:hover {
+  opacity: 0.75;
+}
+
+.dot.is-active {
+  opacity: 1;
+  transform: scale(1.28);
+}
+
+/* ---------- Panel ---------- */
+
+#panel {
+  flex: 0 0 372px;
+  background: var(--panel);
+  border-left: 1px solid var(--line);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.panel {
+  padding: 34px 30px 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  text-align: center;
+}
+
+.model-name {
+  margin: 0 0 14px;
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+.specs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.spec-value {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 3px;
+}
+
+.spec-number {
+  font-size: 21px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.spec-unit {
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
+.spec-caption {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+
+.tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border-bottom: 1px solid var(--line);
+}
+
+.tab {
+  padding: 9px 0 10px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  background: none;
+  color: var(--ink-faint);
+  font: inherit;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+
+.tab.is-active {
+  color: var(--ink);
+  border-bottom-color: var(--ink);
+}
+
+.trim-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.trim {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 16px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13.5px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.trim:hover {
+  border-color: var(--ink-faint);
+}
+
+.trim.is-active {
+  border-color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+
+.trim-price {
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.savings {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.savings input {
+  accent-color: var(--accent);
+}
+
+.option-group {
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.option-group::before {
+  content: attr(data-title);
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: 12px;
+}
+
+.option-price {
+  font-size: 12px;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.option-name {
+  font-size: 15px;
+  font-weight: 500;
+  margin-top: 1px;
+}
+
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 11px;
+  margin-top: 14px;
+}
+
+.swatch {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0) 55%),
+    var(--swatch);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.swatch:hover {
+  transform: scale(1.08);
+}
+
+.swatch.is-active {
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 3.5px var(--ink);
+}
+
+/* The running total follows you down the panel. Watching the price scroll out
+   of view while you pick options is the one thing a configurator must not do. */
+.panel-foot {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 0;
+  margin-top: -6px;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.price-block {
+  text-align: left;
+}
+
+.price-value {
+  font-size: 21px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.price-caption {
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+
+.order {
+  flex: 1 1 auto;
+  max-width: 190px;
+  padding: 11px 18px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+}
+
+.order:hover {
+  filter: brightness(1.08);
+}
+
+.disclaimer {
+  margin: 0;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--ink-faint);
+  text-align: left;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---------- Narrow screens ---------- */
+
+@media (max-width: 860px) {
+  body {
+    overflow: auto;
+  }
+
+  .layout {
+    flex-direction: column;
+    height: auto;
+  }
+
+  .stage-wrap {
+    height: 56vh;
+    flex: 0 0 auto;
+  }
+
+  #panel {
+    flex: 1 1 auto;
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    overflow: visible;
+  }
+
+  .panel {
+    padding: 26px 20px 36px;
+  }
+}
+
+/* Motion here is decoration -- the configurator is fully usable without any of
+   it, so an explicit preference switches all of it off. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ---------- Model switcher ---------- */
+
+.models {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  padding: 4px;
+  background: var(--chip);
+  border-radius: 6px;
+}
+
+.model {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 9px 4px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.model:hover {
+  color: var(--ink);
+}
+
+.model.is-active {
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+}
+
+.model-name {
+  font-size: 13.5px;
+  font-weight: 550;
+}
+
+.model-blurb {
+  font-size: 10.5px;
+  color: var(--ink-faint);
+}
+
+.model-title {
+  margin: 0 0 14px;
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+/* ---------- Placeholder badge ---------- */
+
+.badge {
+  position: absolute;
+  left: 50%;
+  top: 16px;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 6px 13px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--ink-soft);
+  font-size: 11.5px;
+  white-space: nowrap;
+  box-shadow: var(--shadow);
+}
+
+.badge code {
+  font-size: 11px;
+  color: var(--ink);
+}
+
+/* ---------- Wheel cards ---------- */
+
+.brand {
+  margin: 14px 0 7px;
+  font-size: 10.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  text-align: left;
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 7px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 9px 6px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.card:hover {
+  border-color: var(--ink-faint);
+}
+
+.card.is-active {
+  border-color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+
+.card-size {
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.card-name {
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
+.card-price {
+  margin-top: 2px;
+  font-size: 10.5px;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Row options ---------- */
+
+.row-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.row-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.row-option:hover {
+  border-color: var(--ink-faint);
+}
+
+.row-option.is-active {
+  border-color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+
+.row-price {
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 860px) {
+  .badge {
+    white-space: normal;
+    max-width: 82%;
+    text-align: center;
+  }
+}
