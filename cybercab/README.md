@@ -34,12 +34,20 @@ approximations built from curve tables, and the app says so with a badge over
 the render. They exist so the configurator runs, and so option logic could be
 built and tested without assets.
 
-Getting real cars in is a file drop, not a rewrite — see
-[`models/README.md`](models/README.md) for the contract. The loader handles
-scaling, orientation and material assignment; you supply a licensed glTF and a
-list of mesh-name substrings. Everything downstream addresses the car through
-*roles* rather than through geometry the app produced, which is what makes the
-swap free.
+Getting real cars in is a file drop — or just a URL. Append
+`?model=https://your-host/model3.glb` to the page and the loader takes over
+immediately, no code change. See [`models/README.md`](models/README.md) for the
+full contract.
+
+**The loader is validated against a real production car model**, not written
+speculatively. Role mapping, orientation and scale normalisation, tyre/rotor
+handling and the unmapped-material diagnostic were all built against an actual
+downloaded glTF — 105 meshes, 26 materials — and its paint, glass tint, wheel
+finish and caliper colour all drive correctly from the panel.
+
+You supply a licensed glTF; the loader does the rest. Everything downstream
+addresses the car through *roles* rather than through geometry the app produced,
+which is what makes the swap free.
 
 Two features do not survive the swap yet (aero parts and wheel-style
 substitution). Both are documented in `models/README.md` with the exact hook to

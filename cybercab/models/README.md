@@ -4,7 +4,19 @@ This directory is empty on purpose. The configurator ships with a generated
 placeholder body so it runs out of the box; put a real glTF here and it takes
 over completely.
 
-## The short version
+## Fastest way to try one
+
+You do not have to edit any code. Append `?model=<url>` to the page:
+
+```
+index.html?vehicle=model3&model=./models/model3.glb
+index.html?vehicle=model3&model=https://your-cdn.example/model3.glb
+```
+
+The loader takes over immediately. A remote URL needs CORS open on that host.
+Use this to audition models before committing to one.
+
+## Making it the default
 
 1. Put `model3.glb` (or whatever you licensed) in this directory.
 2. In `src/vehicles.js`, set that vehicle's `asset.url`:
@@ -74,14 +86,37 @@ roles: {
 ```
 
 Matching is case-insensitive substring, checked in the order
-wheel → glass → paint → chrome → dark → interior, so a mesh called
-`wheel_rim_chrome` is treated as a wheel rather than as brightwork.
+caliper → rotor → tyre → wheel → glass → paint → chrome → light → dark →
+interior. The order carries meaning: a caliper is part of a wheel assembly but
+has to stay separately colourable, and `tyre` precedes `wheel` so rubber never
+picks up the rim finish.
+
+`ROLES` in `src/loader.js` already covers the conventions Blender's glTF
+exporter and the major marketplaces use — `car_main_paint`, `Glass_mid_tint`,
+`Brake_Disc`, `Sidewall`, `calipers`. Most models need no configuration at all.
+The `roles` block in `vehicles.js` only has to list *overrides*.
+
+**Tyres and rotors are normalised, not inherited.** Downloaded models are wildly
+inconsistent here — one real production model tested against this loader ships
+its tyres at Blender's default 0.8 grey, which renders as white sidewalls. A
+tyre is black rubber on every car ever made, so the loader replaces those
+materials rather than reproducing the mistake.
 
 **Anything that matches nothing keeps the material the artist authored.** That
 is deliberate: an unmapped mesh renders as the artist intended rather than
 vanishing, so a model with unusual naming still looks right while you work out
-the strings. Open the model in any glTF viewer, read the mesh names, and add
-them to the lists.
+the strings.
+
+You do not have to guess which those are. On load, the console prints a count
+per role and then lists every unmapped material by name:
+
+```
+[configurator] role mapping: { paint: 2, glass: 6, wheel: 4, … , unmapped: 3 }
+[configurator] 3 unmapped material(s), keeping authored look: ['ior_1', 'mirror', 'licence_plate_light']
+```
+
+Paste those strings into the appropriate role list and reload. Pale grey patches
+on an otherwise correct car are almost always an unmapped material.
 
 ## Known gaps
 

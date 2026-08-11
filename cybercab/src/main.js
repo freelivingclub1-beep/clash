@@ -40,6 +40,13 @@ function readUrl() {
   return patch;
 }
 
+/**
+ * `?model=<url>` points the loader at any glTF without touching the source.
+ * Since real vehicle assets can't be shipped with the demo, this is how you
+ * try one: host a .glb anywhere with CORS open and paste the URL.
+ */
+const modelOverride = new URLSearchParams(location.search ?? '').get('model');
+
 function writeUrl(state) {
   const q = new URLSearchParams();
   for (const key of URL_KEYS) q.set(key, state[key]);
@@ -91,7 +98,7 @@ function rebuildCar() {
   // If this vehicle names a real glTF, it supersedes the generated body the
   // moment it finishes downloading. Until then the placeholder is on screen,
   // which is better than an empty stage.
-  loadVehicleAsset(vehicle, parts)
+  loadVehicleAsset(vehicle, parts, modelOverride)
     .then((loaded) => {
       if (!loaded || vehicle.id !== loaded.vehicle.id) return;
       stage.scene.remove(car.root);
@@ -105,7 +112,7 @@ function rebuildCar() {
       console.warn(`[cybercab] asset load failed for ${vehicle.id}:`, err);
     });
 
-  setBadge(!vehicle.asset?.url);
+  setBadge(!(modelOverride || vehicle.asset?.url));
 }
 
 function rebuildAero() {

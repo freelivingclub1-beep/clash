@@ -1,1 +1,6 @@
 node_modules/
+
+# Vehicle assets are licensed separately and never committed.
+cybercab/models/*.glb
+cybercab/models/*.gltf
+cybercab/models/*.bin
