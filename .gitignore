@@ -3,3 +3,5 @@ __pycache__/
 .pytest_cache/
 *.db
 treblo/tags.json
+.treblo-auth.json
+treblo/selectors.json

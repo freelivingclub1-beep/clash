@@ -185,3 +185,28 @@ def test_status_reports_when_the_next_generation_can_run(rig):
     assert not status["can_start"]
     assert status["seconds_until_available"] > 0
     assert status["tags"][0] == "yeat"
+
+
+def test_browser_driver_refuses_to_run_without_real_selectors():
+    from treblo.driver import BrowserDriver
+
+    with pytest.raises(NotImplementedError, match="tag_input"):
+        BrowserDriver(page=object(), selectors={})
+
+
+def test_browser_driver_names_only_the_missing_selectors():
+    from treblo.driver import BrowserDriver, REQUIRED_SELECTORS
+
+    partial = {k: f"sel-{k}" for k in REQUIRED_SELECTORS if k != "generate_button"}
+    with pytest.raises(NotImplementedError) as excinfo:
+        BrowserDriver(page=object(), selectors=partial)
+    assert "generate_button" in str(excinfo.value)
+    assert "tag_input" not in str(excinfo.value)
+
+
+def test_browser_driver_constructs_once_selectors_are_present():
+    from treblo.driver import BrowserDriver, REQUIRED_SELECTORS
+
+    complete = {k: f"sel-{k}" for k in REQUIRED_SELECTORS}
+    driver = BrowserDriver(page=object(), selectors=complete)
+    assert driver.selectors["generate_button"] == "sel-generate_button"

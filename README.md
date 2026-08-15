@@ -85,18 +85,32 @@ the lyric gate — work end to end before any real driver exists.
 
 ## Wiring up the real thing
 
-1. Open treblo.com's Create page in a browser with dev tools.
-2. Read the actual selectors for the tag input, the lyrics radio and textarea,
-   the Generate button, and the Library rows.
-3. Put them in `BrowserDriver.SELECTORS` and implement `submit` / `poll`.
+Run these on your own machine — all three steps need to reach treblo.com.
 
-`BrowserDriver` refuses to construct until the selectors are filled in, so
-there's no way to half-wire it and get confusing failures.
+```
+pip install playwright && playwright install chromium
 
-The UI flow it needs to drive, from the app: Advanced tab → Model v3 → type
-each tag into "Search for styles" and pick the match → Custom Lyrics + paste,
-or Auto Lyrics → Style Strength → Generate → watch the Library for the two new
-songs.
+python -m treblo.session login        # browser opens; you log in by hand
+python scripts/discover_selectors.py  # reads the real selectors off the page
+```
+
+`session login` never asks for your password. It opens a real browser, waits
+while *you* log in, then saves the session cookies to `.treblo-auth.json`
+(gitignored). Captcha, 2FA and email links all just work, because a human is
+doing the login. Treat that file like a password.
+
+`discover_selectors.py` then writes `treblo/selectors.json` and prints a
+snippet of each element it matched so you can check it grabbed the right one.
+It reports anything it can't find rather than guessing — a selector that
+silently matches the wrong element is worse than a missing one.
+
+That leaves `submit()` and `poll()` in `treblo/driver.py`. `BrowserDriver`
+refuses to construct until every required selector is present, so you can't
+half-wire it and get confusing failures.
+
+The UI flow it drives, from the app: Advanced tab → Model v3 → type each tag
+into "Search for styles" and pick the match → Custom Lyrics + paste, or Auto
+Lyrics → Style Strength → Generate → watch the Library for the two new songs.
 
 ## Better lyrics
 
@@ -122,7 +136,9 @@ treblo/lyrics.py    dedupe gate, topic filter, lyric sources
 treblo/library.py   SQLite index (metadata only)
 treblo/driver.py    the Treblo seam: FakeDriver + BrowserDriver skeleton
 treblo/runner.py    the scheduler loop
+treblo/session.py   hand-driven login, saved session reuse
 treblo/cli.py       command line
+scripts/discover_selectors.py
 ```
 
-Tests: `python -m pytest tests -q` (48 tests).
+Tests: `python -m pytest tests -q` (51 tests).

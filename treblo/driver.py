@@ -16,10 +16,12 @@ Two implementations ship here:
 
 from __future__ import annotations
 
+import json
 import random
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 
 
 class JobState(str, Enum):
@@ -124,50 +126,79 @@ class FakeDriver(TrebloDriver):
         return JobStatus(job_id, JobState.DONE, songs=songs)
 
 
-class BrowserDriver(TrebloDriver):
-    """Skeleton for driving the real site.
+REQUIRED_SELECTORS = (
+    "advanced_tab",
+    "tag_input",
+    "custom_lyrics_radio",
+    "auto_lyrics_radio",
+    "lyrics_textarea",
+    "generate_button",
+)
 
-    Filling this in needs an authenticated browser session and the actual
-    selectors from treblo.com's Create page. The UI flow, from the app, is:
+SELECTORS_PATH = Path(__file__).with_name("selectors.json")
+
+
+def load_selectors(path: Path | None = None) -> dict[str, str]:
+    """Load selectors discovered by scripts/discover_selectors.py."""
+    path = path or SELECTORS_PATH
+    if not path.exists():
+        return {}
+    return json.loads(path.read_text())
+
+
+class BrowserDriver(TrebloDriver):
+    """Drives the real site through a logged-in Playwright page.
+
+    The UI flow, from the app:
 
       1. Advanced tab, Model = v3
       2. Sound: type each tag into "Search for styles" and pick the match
-      3. Lyrics: pick Custom Lyrics and paste, or pick Auto Lyrics
+      3. Lyrics: Custom Lyrics + paste, or Auto Lyrics
       4. Style Strength slider
       5. Generate
       6. Watch the Library for the two new songs to finish rendering
 
-    Steps 2, 5 and 6 are the ones that need real selectors. Do not guess them
-    -- open the page, read them off, and put them in SELECTORS below.
+    Selectors are not hardcoded here because guessing them produces code that
+    fails on contact. Get them with:
+
+        python -m treblo.session login
+        python scripts/discover_selectors.py
+
+    which writes treblo/selectors.json. This class refuses to construct until
+    that file covers everything in REQUIRED_SELECTORS, so there's no way to
+    half-wire it and get confusing failures later.
     """
 
-    SELECTORS = {
-        "advanced_tab": None,  # TODO
-        "tag_input": None,  # TODO  "Search for styles"
-        "tag_option": None,  # TODO  dropdown result row
-        "custom_lyrics_radio": None,  # TODO
-        "auto_lyrics_radio": None,  # TODO
-        "lyrics_textarea": None,  # TODO  "Enter custom lyrics"
-        "generate_button": None,  # TODO
-        "library_row": None,  # TODO  a song row, with its render state
-    }
-
-    def __init__(self, page, base_url: str = "https://treblo.com") -> None:
+    def __init__(
+        self,
+        page,
+        base_url: str = "https://treblo.com",
+        selectors: dict[str, str] | None = None,
+    ) -> None:
         self.page = page
         self.base_url = base_url
+        self.selectors = selectors if selectors is not None else load_selectors()
         self._check_configured()
 
     def _check_configured(self) -> None:
-        missing = [k for k, v in self.SELECTORS.items() if not v]
+        missing = [k for k in REQUIRED_SELECTORS if not self.selectors.get(k)]
         if missing:
             raise NotImplementedError(
                 "BrowserDriver needs real selectors before it can run. Missing: "
                 + ", ".join(missing)
-                + ". Read them off the live Create page and fill in SELECTORS."
+                + ".\nRun:  python -m treblo.session login"
+                + "\n then: python scripts/discover_selectors.py"
             )
 
     def submit(self, spec: GenerationSpec) -> str:  # pragma: no cover - needs a browser
-        raise NotImplementedError("fill in SELECTORS, then implement submit()")
+        raise NotImplementedError(
+            "submit() still needs writing against the live page. The selectors "
+            "are loaded; what's left is the click order and how Treblo reports "
+            "a queued generation back."
+        )
 
     def poll(self, job_id: str) -> JobStatus:  # pragma: no cover - needs a browser
-        raise NotImplementedError("fill in SELECTORS, then implement poll()")
+        raise NotImplementedError(
+            "poll() still needs writing: read the Library rows for this "
+            "generation and map their render state onto JobState."
+        )
