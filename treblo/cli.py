@@ -47,6 +47,16 @@ def build_runner(args) -> tuple[Runner, Library]:
     clock = time.time
     driver = build_driver(args, clock)
     writer = LyricWriter(TemplateSource(), Deduplicator(library))
+
+    if args.analyze:
+        from .analysis import LibrosaAnalyzer
+
+        analyzer = LibrosaAnalyzer()
+    else:
+        from .analysis import NullAnalyzer
+
+        analyzer = NullAnalyzer()
+
     runner = Runner(
         driver=driver,
         library=library,
@@ -55,6 +65,7 @@ def build_runner(args) -> tuple[Runner, Library]:
         tag_set=TagSet(args.tags),
         rotation_pool=args.rotate,
         config=RunnerConfig(bars_per_song=args.bars),
+        analyzer=analyzer,
         clock=clock,
     )
     return runner, library
@@ -120,11 +131,61 @@ def cmd_status(args) -> int:
 def cmd_songs(args) -> int:
     library = Library(args.db)
     for song in library.songs(limit=args.limit):
-        print(
-            f"#{song.id:<5} {song.status:<8} [{','.join(song.tags)}] "
-            f"{song.lyric_mode:<7} {song.treblo_url or ''}"
-        )
+        features = library.get_features(song.id)
+        detail = features.summary() if features else "not analysed"
+        print(f"#{song.id:<5} {song.status:<7} {detail}")
+        print(f"       [{','.join(song.tags)}]  {song.lyric_mode}  {song.treblo_url or ''}")
     library.close()
+    return 0
+
+
+def cmd_find(args) -> int:
+    """Search the catalogue by what the songs actually sound like."""
+    library = Library(args.db)
+    results = library.find_songs(
+        key=args.key,
+        mode=args.mode,
+        bpm_min=args.bpm_min,
+        bpm_max=args.bpm_max,
+        limit=args.limit,
+    )
+    if not results:
+        print("Nothing matched. (Songs need analysing first -- run with --analyze.)")
+    for song, features in results:
+        print(f"#{song.id:<5} {features.summary()}")
+        print(f"       [{','.join(song.tags)}]  {song.treblo_url or ''}")
+    library.close()
+    return 0
+
+
+def cmd_analyze(args) -> int:
+    """Measure any finished songs that haven't been measured yet."""
+    from .analysis import LibrosaAnalyzer
+
+    library = Library(args.db)
+    analyzer = LibrosaAnalyzer()
+    pending = library.songs_awaiting_analysis(limit=args.limit)
+    print(f"{len(pending)} song(s) to analyse")
+
+    for song in pending:
+        try:
+            features = analyzer.analyze(song.treblo_url)
+        except Exception as exc:
+            print(f"#{song.id}: failed -- {exc}")
+            continue
+        library.add_features(song.id, time.time(), features)
+        print(f"#{song.id}: {features.summary()}")
+
+    library.close()
+    return 0
+
+
+def cmd_cost(args) -> int:
+    from .costs import comparison_table, estimate
+
+    est = estimate(args.songs_per_day, model=args.model, vps_per_month=args.vps)
+    print(est.report())
+    print(comparison_table(args.songs_per_day, args.vps))
     return 0
 
 
@@ -155,14 +216,37 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="polling endpoint for --driver http, with {job_id} in it",
     )
+    p_run.add_argument(
+        "--analyze",
+        action="store_true",
+        help="measure key/BPM for each song as it lands (needs librosa)",
+    )
     p_run.set_defaults(func=cmd_run)
 
     p_status = sub.add_parser("status", help="library summary")
     p_status.set_defaults(func=cmd_status)
 
-    p_songs = sub.add_parser("songs", help="list recent songs")
+    p_songs = sub.add_parser("songs", help="list recent songs with key/BPM")
     p_songs.add_argument("--limit", type=int, default=20)
     p_songs.set_defaults(func=cmd_songs)
+
+    p_find = sub.add_parser("find", help="search by key, mode or BPM")
+    p_find.add_argument("--key", help='e.g. "F#"')
+    p_find.add_argument("--mode", choices=["major", "minor"])
+    p_find.add_argument("--bpm-min", type=float)
+    p_find.add_argument("--bpm-max", type=float)
+    p_find.add_argument("--limit", type=int, default=50)
+    p_find.set_defaults(func=cmd_find)
+
+    p_analyze = sub.add_parser("analyze", help="measure key/BPM for finished songs")
+    p_analyze.add_argument("--limit", type=int, default=50)
+    p_analyze.set_defaults(func=cmd_analyze)
+
+    p_cost = sub.add_parser("cost", help="estimate what running this costs")
+    p_cost.add_argument("--songs-per-day", type=int, default=100)
+    p_cost.add_argument("--model", default="template")
+    p_cost.add_argument("--vps", type=float, default=5.0, help="machine cost per month")
+    p_cost.set_defaults(func=cmd_cost)
 
     args = parser.parse_args(argv)
     return args.func(args)

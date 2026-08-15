@@ -210,3 +210,98 @@ def test_browser_driver_constructs_once_selectors_are_present():
     complete = {k: f"sel-{k}" for k in REQUIRED_SELECTORS}
     driver = BrowserDriver(page=object(), selectors=complete)
     assert driver.selectors["generate_button"] == "sel-generate_button"
+
+
+class StubAnalyzer:
+    """Stands in for librosa: records what it was asked to measure."""
+
+    def __init__(self, fail_on=()):
+        self.seen = []
+        self.fail_on = set(fail_on)
+
+    def analyze(self, url):
+        from treblo.analysis import AudioFeatures
+
+        self.seen.append(url)
+        if url in self.fail_on:
+            raise RuntimeError("download died")
+        return AudioFeatures(bpm=142.0, key="F#", mode="minor", duration_s=131.0)
+
+
+def test_songs_get_measured_as_they_land(tmp_path):
+    clock = Clock()
+    library = Library(tmp_path / "t.db")
+    analyzer = StubAnalyzer()
+    runner = Runner(
+        driver=FakeDriver(clock, seed=5),
+        library=library,
+        writer=LyricWriter(TemplateSource(), Deduplicator(library)),
+        quota=Quota(clock=clock),
+        tag_set=TagSet(["yeat", "trap", "piano"]),
+        config=RunnerConfig(bars_per_song=4),
+        analyzer=analyzer,
+        clock=clock,
+    )
+    runner.run(max_generations=3, sleep=clock.sleep)
+
+    done = library.songs(status="done")
+    assert done, "no songs finished"
+    for song in done:
+        features = library.get_features(song.id)
+        assert features is not None, f"song {song.id} was never analysed"
+        assert features.key_name == "F# minor"
+        assert features.bpm == 142.0
+    library.close()
+
+
+def test_each_song_is_only_analysed_once(tmp_path):
+    clock = Clock()
+    library = Library(tmp_path / "t.db")
+    analyzer = StubAnalyzer()
+    runner = Runner(
+        driver=FakeDriver(clock, seed=5),
+        library=library,
+        writer=LyricWriter(TemplateSource(), Deduplicator(library)),
+        quota=Quota(clock=clock),
+        tag_set=TagSet(["yeat", "trap", "piano"]),
+        config=RunnerConfig(bars_per_song=4),
+        analyzer=analyzer,
+        clock=clock,
+    )
+    runner.run(max_generations=3, sleep=clock.sleep)
+    for _ in range(5):
+        runner.analyze_pending()
+
+    assert len(analyzer.seen) == len(set(analyzer.seen)), "a song was analysed twice"
+    library.close()
+
+
+def test_a_failed_analysis_doesnt_stall_the_loop_or_retry_forever(tmp_path):
+    clock = Clock()
+    library = Library(tmp_path / "t.db")
+    runner = Runner(
+        driver=FakeDriver(clock, seed=5),
+        library=library,
+        writer=LyricWriter(TemplateSource(), Deduplicator(library)),
+        quota=Quota(clock=clock),
+        tag_set=TagSet(["yeat", "trap", "piano"]),
+        config=RunnerConfig(bars_per_song=4),
+        analyzer=StubAnalyzer(fail_on=["https://treblo.com/song/fake-1-0"]),
+        clock=clock,
+    )
+    runner.run(max_generations=3, sleep=clock.sleep)
+
+    assert runner.generation_count == 3
+    before = len(runner.analyzer.seen)
+    runner.analyze_pending()
+    assert len(runner.analyzer.seen) == before, "kept retrying a failed analysis"
+    library.close()
+
+
+def test_analysis_is_off_unless_asked_for(rig):
+    runner, clock, library, _ = rig
+    runner.run(max_generations=2, sleep=clock.sleep)
+
+    assert runner.analyze_pending() == []
+    for song in library.songs(status="done"):
+        assert library.get_features(song.id) is None

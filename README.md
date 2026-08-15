@@ -215,6 +215,64 @@ fresh capture. Expect to borrow a laptop again for two minutes whenever it
 happens. How often depends on how long Treblo's sessions last, which you'll
 only learn by running it.
 
+## What each song actually is
+
+A title tells you nothing about a track you've never heard. Every finished
+song gets measured, so the library reads like something you can act on:
+
+```
+#16    done    G minor  143 BPM  2:05  warm
+       [yeat,guitar,piano]  custom  https://treblo.com/song/...
+```
+
+Key (Krumhansl-Schmuckler over the chroma), BPM, duration, loudness,
+brightness and energy. Then you can search by sound rather than by title:
+
+```
+python -m treblo.cli find --mode minor --bpm-min 140 --bpm-max 175
+python -m treblo.cli find --key F#
+```
+
+**It still doesn't keep the audio.** Each file is streamed to a temp path,
+measured, and deleted in a `finally` — the numbers are a few hundred bytes,
+the MP3 is megabytes. Two tests assert the file is gone afterwards, including
+when the analysis throws.
+
+Needs `pip install librosa` and is off by default (`--analyze` to enable),
+because librosa pulls in numpy/scipy and the analysis is CPU-bound — roughly
+the length of the song, per song. Fine on a laptop; slow on the smallest VPS.
+The scheduler always dispatches generations *before* analysing, so a slow box
+costs you song detail, never throughput.
+
+## What it costs
+
+```
+python -m treblo.cli cost --songs-per-day 200 --model claude-haiku-4-5
+```
+
+Three bills, and only one is really under your control:
+
+| | Cost |
+| --- | --- |
+| **Treblo plan** | whatever their tier costs — and it's the real cap on throughput |
+| **Machine** | ~$4–5/mo VPS, or £0 on a spare laptop |
+| **Lyrics** | £0 with the built-in writer; per-generation with Claude |
+
+At **1000 songs/day**, lyrics via API:
+
+```
+  model                lyrics/mo    total/mo
+  ------------------------------------------
+  template                 $0.00       $5.00
+  claude-haiku-4-5        $60.00      $65.00
+  claude-sonnet-5        $180.00     $185.00
+  claude-opus-5          $300.00     $305.00
+```
+
+Only 2 of every 3 generations hit the API — the third uses Treblo's Auto
+Lyrics — and one generation covers two songs, so the API is billed once per
+two songs. Both facts are in the estimate.
+
 ## Better lyrics
 
 `TemplateSource` is a stand-in — it builds bars combinatorially so the pipeline
@@ -240,6 +298,8 @@ treblo/library.py   SQLite index (metadata only)
 treblo/driver.py      the Treblo seam: FakeDriver + BrowserDriver skeleton
 treblo/capture.py     parse a copied cURL into a reusable request template
 treblo/http_driver.py replays that request -- the recommended path, stdlib only
+treblo/analysis.py    key / BPM / feel per song, audio never kept
+treblo/costs.py       what running it costs
 treblo/runner.py      the scheduler loop
 treblo/session.py     hand-driven login, saved session reuse
 treblo/cli.py         command line
@@ -249,4 +309,4 @@ deploy/setup.sh                one-shot VPS install
 deploy/treblo.service          systemd unit
 ```
 
-Tests: `python -m pytest tests -q` (76 tests).
+Tests: `python -m pytest tests -q` (108 tests).

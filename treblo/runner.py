@@ -19,6 +19,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Callable
 
+from .analysis import Analyzer, NullAnalyzer
 from .driver import GenerationSpec, JobState, TrebloDriver
 from .library import Library
 from .lyrics import Deduplicator, LyricWriter, ThemeBank
@@ -48,6 +49,7 @@ class Runner:
     rotation_pool: list[str] = field(default_factory=list)
     themes: ThemeBank = field(default_factory=ThemeBank)
     config: RunnerConfig = field(default_factory=RunnerConfig)
+    analyzer: Analyzer = field(default_factory=NullAnalyzer)
     clock: Callable[[], float] = time.time
 
     generation_count: int = field(default=0, init=False)
@@ -67,11 +69,40 @@ class Runner:
         started = None
         if self.quota.can_start():
             started = self._start_generation()
+        analyzed = self.analyze_pending()
         return {
             "finished": finished,
             "started": started,
+            "analyzed": analyzed,
             "quota": self.quota.status(),
         }
+
+    def analyze_pending(self, limit: int = 4) -> list[int]:
+        """Measure key/BPM for songs that have landed but aren't analysed.
+
+        Runs after generation is dispatched, never before -- analysis is nice
+        to have, and must not be what stops a free slot being used. A song
+        whose analysis fails is logged and left alone rather than retried
+        forever; the audio is deleted either way.
+        """
+        if isinstance(self.analyzer, NullAnalyzer):
+            return []
+
+        analyzed = []
+        for song in self.library.songs_awaiting_analysis(limit=limit):
+            try:
+                features = self.analyzer.analyze(song.treblo_url)
+            except Exception as exc:
+                self.library.log(self.clock(), "analysis_failed", f"song {song.id}: {exc}")
+                # Record an empty row so we don't retry this one every tick.
+                from .analysis import AudioFeatures
+
+                self.library.add_features(song.id, self.clock(), AudioFeatures())
+                continue
+            self.library.add_features(song.id, self.clock(), features)
+            self.library.log(self.clock(), "analyzed", f"song {song.id}: {features.summary()}")
+            analyzed.append(song.id)
+        return analyzed
 
     def run(self, max_generations: int | None = None, sleep: Callable[[float], None] = time.sleep) -> None:
         """Keep going until the generation cap is hit, or forever if None."""
@@ -80,10 +111,14 @@ class Runner:
             if result["started"] is None and not result["finished"]:
                 sleep(self.wait_hint())
 
-        # Don't leave the last batch un-recorded.
+        # Don't leave the last batch un-recorded -- or un-analysed.
         while self.quota.in_flight:
             if not self._reap():
                 sleep(self.wait_hint())
+            self.analyze_pending()
+
+        # The final reap can land songs after the loop above exits.
+        self.analyze_pending()
 
     def wait_hint(self) -> float:
         """How long to sleep before the next poll.

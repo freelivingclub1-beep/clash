@@ -50,6 +50,18 @@ CREATE TABLE IF NOT EXISTS events (
     kind    TEXT NOT NULL,
     detail  TEXT
 );
+CREATE TABLE IF NOT EXISTS features (
+    song_id        INTEGER PRIMARY KEY REFERENCES songs(id),
+    analyzed_at    REAL NOT NULL,
+    bpm            REAL,
+    key            TEXT,
+    mode           TEXT,
+    key_confidence REAL,
+    duration_s     REAL,
+    loudness_db    REAL,
+    brightness     REAL,
+    energy         REAL
+);
 """
 
 
@@ -182,6 +194,88 @@ class Library:
 
     def line_count(self) -> int:
         return int(self.conn.execute("SELECT COUNT(*) FROM lines").fetchone()[0])
+
+    # -- audio features ---------------------------------------------------
+
+    def add_features(self, song_id: int, at: float, features) -> None:
+        self.conn.execute(
+            "INSERT OR REPLACE INTO features (song_id, analyzed_at, bpm, key, mode,"
+            " key_confidence, duration_s, loudness_db, brightness, energy)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                song_id,
+                at,
+                features.bpm,
+                features.key,
+                features.mode,
+                features.key_confidence,
+                features.duration_s,
+                features.loudness_db,
+                features.brightness,
+                features.energy,
+            ),
+        )
+        self.conn.commit()
+
+    def get_features(self, song_id: int):
+        from .analysis import AudioFeatures
+
+        row = self.conn.execute(
+            "SELECT * FROM features WHERE song_id = ?", (song_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        return AudioFeatures(
+            bpm=row["bpm"],
+            key=row["key"],
+            mode=row["mode"],
+            key_confidence=row["key_confidence"],
+            duration_s=row["duration_s"],
+            loudness_db=row["loudness_db"],
+            brightness=row["brightness"],
+            energy=row["energy"],
+        )
+
+    def songs_awaiting_analysis(self, limit: int = 20) -> list[Song]:
+        """Finished songs with a URL that haven't been measured yet."""
+        rows = self.conn.execute(
+            "SELECT s.* FROM songs s LEFT JOIN features f ON f.song_id = s.id"
+            " WHERE s.status = 'done' AND s.treblo_url IS NOT NULL"
+            " AND f.song_id IS NULL ORDER BY s.created_at LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [_to_song(r) for r in rows]
+
+    def find_songs(
+        self,
+        *,
+        key: str | None = None,
+        mode: str | None = None,
+        bpm_min: float | None = None,
+        bpm_max: float | None = None,
+        limit: int = 50,
+    ) -> list[tuple[Song, "object"]]:
+        """Search the catalogue by what the songs actually sound like."""
+        clauses, params = ["s.status = 'done'"], []
+        if key:
+            clauses.append("f.key = ?")
+            params.append(key)
+        if mode:
+            clauses.append("f.mode = ?")
+            params.append(mode)
+        if bpm_min is not None:
+            clauses.append("f.bpm >= ?")
+            params.append(bpm_min)
+        if bpm_max is not None:
+            clauses.append("f.bpm <= ?")
+            params.append(bpm_max)
+
+        rows = self.conn.execute(
+            "SELECT s.id FROM songs s JOIN features f ON f.song_id = s.id"
+            f" WHERE {' AND '.join(clauses)} ORDER BY f.bpm LIMIT ?",
+            (*params, limit),
+        ).fetchall()
+        return [(self.get_song(r["id"]), self.get_features(r["id"])) for r in rows]
 
     # -- events -----------------------------------------------------------
 
