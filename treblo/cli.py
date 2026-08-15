@@ -23,10 +23,29 @@ from .runner import Runner, RunnerConfig
 from .tags import TagError, TagSet
 
 
+def build_driver(args, clock):
+    if args.driver == "fake":
+        return FakeDriver(clock, seed=args.seed)
+    if args.driver == "http":
+        from .http_driver import HttpDriver
+
+        try:
+            return HttpDriver(status_url=args.status_url)
+        except FileNotFoundError as exc:
+            raise SystemExit(str(exc)) from None
+    if args.driver == "browser":
+        raise SystemExit(
+            "The browser driver needs submit()/poll() implemented first. "
+            "Prefer --driver http: capture the request with dev tools and run "
+            "scripts/from_curl.py."
+        )
+    raise SystemExit(f"unknown driver: {args.driver}")
+
+
 def build_runner(args) -> tuple[Runner, Library]:
     library = Library(args.db)
     clock = time.time
-    driver = FakeDriver(clock, seed=args.seed)
+    driver = build_driver(args, clock)
     writer = LyricWriter(TemplateSource(), Deduplicator(library))
     runner = Runner(
         driver=driver,
@@ -125,6 +144,17 @@ def main(argv: list[str] | None = None) -> int:
     p_run.add_argument("--bars", type=int, default=16)
     p_run.add_argument("--burst", type=int, default=3)
     p_run.add_argument("--seed", type=int, default=0)
+    p_run.add_argument(
+        "--driver",
+        choices=["fake", "http", "browser"],
+        default="fake",
+        help="fake = offline simulator; http = replay a captured request",
+    )
+    p_run.add_argument(
+        "--status-url",
+        default=None,
+        help="polling endpoint for --driver http, with {job_id} in it",
+    )
     p_run.set_defaults(func=cmd_run)
 
     p_status = sub.add_parser("status", help="library summary")

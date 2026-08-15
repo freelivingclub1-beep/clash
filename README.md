@@ -14,11 +14,11 @@ locked in front, the no-repeat guarantee across the whole catalogue, subject
 matter steering, and a local index that stores metadata only. All of that is
 built here and tested.
 
-**The caveat:** Treblo has no public API. So the piece that literally presses
-Generate on treblo.com is a seam you have to fill in — `treblo/driver.py` —
-against a logged-in browser session. Everything else is written against that
-seam, so filling it in is the only work left. I did not invent an API and
-write code against it, because that code would just fail.
+**The caveat:** Treblo has no *published* API, so the piece that actually
+talks to it is a seam you fill in — see **How do I get an API?** below. The
+short version: capture the request the web app already makes, and replay it.
+Tooling for that is here. I did not invent an API and write code against it,
+because that code would just fail.
 
 **The other caveat:** "run in the background" needs a machine that stays on.
 Not your phone — iOS suspends background tabs, which is exactly why you can't
@@ -83,9 +83,65 @@ python -m treblo.cli songs
 times so you can watch the whole pipeline — scheduling, waiting, tag rotation,
 the lyric gate — work end to end before any real driver exists.
 
-## Wiring up the real thing
+## How do I get an API?
 
-Run these on your own machine — all three steps need to reach treblo.com.
+There's no *published* Treblo API. There is definitely a **private** one — the
+web app has to call something when you press Generate — and you can capture it
+in about two minutes. That capture *is* your API.
+
+This is the better of the two paths by a distance. Sending the same HTTP
+request the button sends is far lighter than driving a whole Chromium to click
+it, doesn't break when the page layout shifts, and runs on anything.
+
+### Capture it (desktop browser, once)
+
+1. Open treblo.com, log in, go to Create.
+2. Dev tools (F12) → **Network** tab → tick **Preserve log**.
+3. Set tags to exactly `yeat` `trap` `piano`. Pick Custom Lyrics and paste a
+   line you'll recognise: `MARKER LINE ONE`
+4. Press **Generate**.
+5. Find the request that fired — usually a POST named something like
+   `generate` / `create` / `songs`. Right-click → **Copy** → **Copy as cURL**.
+6. Paste it into `capture.txt`, then:
+
+```
+python scripts/from_curl.py capture.txt --tags yeat trap piano \
+    --lyrics-snippet "MARKER LINE ONE"
+```
+
+It finds where the tags and lyrics live in the payload by searching for the
+values you know you typed — so you never have to reverse-engineer their JSON
+by hand. It writes:
+
+- `treblo/request.json` — the request shape, **safe to commit**
+- `.treblo-secrets.json` — your cookies and auth headers, **gitignored**
+
+A test asserts no credential ever ends up in the committed template.
+
+It also *lists* the fields that might control Custom vs Auto lyrics rather
+than picking one, because a wrong guess there silently generates the wrong
+kind of song. Capture one Auto Lyrics generation too and diff the two bodies
+to see which field actually flipped.
+
+### Then run it
+
+```
+python -m treblo.cli run --driver http \
+    --status-url 'https://treblo.com/api/.../{job_id}' \
+    --generations 20
+```
+
+`--status-url` is the polling endpoint — capture it the same way by watching
+which request repeats while a song renders.
+
+`HttpDriver` is stdlib-only, so the machine that runs it needs nothing
+installed beyond Python. A Raspberry Pi or the cheapest VPS is plenty.
+
+## The other path: browser automation
+
+Slower and more fragile, but works if the request turns out to be awkward to
+replay (signed payloads, heavy anti-bot). Run these on your own machine — all
+three steps need to reach treblo.com.
 
 ```
 pip install playwright && playwright install chromium
@@ -134,11 +190,14 @@ treblo/tags.py      vocabulary, validation, the locked anchor tag
 treblo/quota.py     burst limit + self-calibrating next-slot prediction
 treblo/lyrics.py    dedupe gate, topic filter, lyric sources
 treblo/library.py   SQLite index (metadata only)
-treblo/driver.py    the Treblo seam: FakeDriver + BrowserDriver skeleton
-treblo/runner.py    the scheduler loop
-treblo/session.py   hand-driven login, saved session reuse
-treblo/cli.py       command line
-scripts/discover_selectors.py
+treblo/driver.py      the Treblo seam: FakeDriver + BrowserDriver skeleton
+treblo/capture.py     parse a copied cURL into a reusable request template
+treblo/http_driver.py replays that request -- the recommended path, stdlib only
+treblo/runner.py      the scheduler loop
+treblo/session.py     hand-driven login, saved session reuse
+treblo/cli.py         command line
+scripts/from_curl.py           capture -> request template
+scripts/discover_selectors.py  browser-automation fallback
 ```
 
-Tests: `python -m pytest tests -q` (51 tests).
+Tests: `python -m pytest tests -q` (72 tests).

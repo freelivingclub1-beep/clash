@@ -5,3 +5,6 @@ __pycache__/
 treblo/tags.json
 .treblo-auth.json
 treblo/selectors.json
+.treblo-secrets.json
+treblo/request.json
+capture.txt
