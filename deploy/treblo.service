@@ -1,0 +1,37 @@
+[Unit]
+Description=Treblo generation scheduler
+Documentation=https://github.com/freelivingclub1-beep/clash
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=treblo
+Group=treblo
+WorkingDirectory=/opt/treblo
+EnvironmentFile=/etc/treblo.env
+ExecStart=/opt/treblo/.venv/bin/python -m treblo.cli \
+    --db /var/lib/treblo/treblo.db \
+    run --driver http \
+    --status-url ${TREBLO_STATUS_URL} \
+    --tags ${TREBLO_TAGS} \
+    --bars ${TREBLO_BARS}
+
+# Keep going across reboots, network blips, and expired-session crashes.
+# The scheduler is stateless between ticks; SQLite holds everything.
+Restart=always
+RestartSec=30
+
+# Nothing here needs privileges.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/treblo
+StateDirectory=treblo
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

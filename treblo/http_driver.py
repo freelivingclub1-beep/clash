@@ -35,6 +35,24 @@ FAILED_STATES = {"failed", "error", "errored", "cancelled", "canceled"}
 PENDING_STATES = {"queued", "pending", "waiting", "submitted"}
 
 
+class SessionExpired(RuntimeError):
+    """Treblo stopped accepting our credentials.
+
+    Session cookies don't last forever, so an unattended run will eventually
+    hit this. Raised loudly rather than retried, because no amount of retrying
+    fixes it -- it needs a fresh capture.
+    """
+
+    def __init__(self, status: int) -> None:
+        super().__init__(
+            f"Treblo rejected our credentials (HTTP {status}). The saved session "
+            "has expired.\nRe-capture it in dev tools, then replace "
+            ".treblo-secrets.json and restart:\n"
+            "    python scripts/from_curl.py capture.txt --tags yeat trap piano"
+        )
+        self.status = status
+
+
 class HttpDriver(TrebloDriver):
     def __init__(
         self,
@@ -128,7 +146,12 @@ class HttpDriver(TrebloDriver):
         for name, value in merged.items():
             request.add_header(name, value)
 
-        raw = self._open(request, self.timeout)
+        try:
+            raw = self._open(request, self.timeout)
+        except urllib.error.HTTPError as exc:
+            if exc.code in (401, 403):
+                raise SessionExpired(exc.code) from None
+            raise
         if not raw:
             return {}
         try:

@@ -131,3 +131,57 @@ def test_poll_without_a_status_url_says_what_to_capture(template):
     driver, _ = make(template, [])
     with pytest.raises(RuntimeError, match="needs status_url"):
         driver.poll("gen_77")
+
+
+class FailingHttp:
+    def __init__(self, code, retry_after=None):
+        self.code = code
+        headers = {"Retry-After": retry_after} if retry_after else {}
+        self.headers = headers
+
+    def __call__(self, request, timeout):
+        import urllib.error
+
+        raise urllib.error.HTTPError(
+            request.full_url, self.code, "nope", self.headers, None
+        )
+
+
+def test_expired_session_says_exactly_how_to_fix_it(template):
+    from treblo.http_driver import SessionExpired
+
+    driver = HttpDriver(template=template, secrets={}, opener=FailingHttp(401))
+    with pytest.raises(SessionExpired, match="expired"):
+        driver.submit(GenerationSpec(tags=["yeat", "trap", "piano"], lyric_mode="auto"))
+
+
+def test_forbidden_is_treated_as_expired_too(template):
+    from treblo.http_driver import SessionExpired
+
+    driver = HttpDriver(template=template, secrets={}, opener=FailingHttp(403))
+    with pytest.raises(SessionExpired):
+        driver.submit(GenerationSpec(tags=["yeat", "trap", "piano"], lyric_mode="auto"))
+
+
+def test_rate_limit_feeds_the_quota_backoff_instead_of_failing(template):
+    driver = HttpDriver(
+        template=template,
+        secrets={},
+        opener=FailingHttp(429, retry_after="90"),
+        status_url="https://treblo.com/s/{job_id}",
+    )
+    status = driver.poll("gen_1")
+    assert status.state is JobState.QUEUED
+    assert status.retry_after == 90.0
+
+
+def test_other_http_errors_are_not_mistaken_for_auth_problems(template):
+    driver = HttpDriver(
+        template=template,
+        secrets={},
+        opener=FailingHttp(500),
+        status_url="https://treblo.com/s/{job_id}",
+    )
+    status = driver.poll("gen_1")
+    assert status.state is JobState.FAILED
+    assert "500" in status.error

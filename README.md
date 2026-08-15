@@ -22,8 +22,8 @@ because that code would just fail.
 
 **The other caveat:** "run in the background" needs a machine that stays on.
 Not your phone — iOS suspends background tabs, which is exactly why you can't
-do this in Safari today. This runs on anything that stays awake: a laptop, a
-Raspberry Pi, a $5/month VPS. Point it at your account and it runs.
+do this in Safari today. See **Running it without owning a computer** below;
+the short version is a $4/month VPS you drive from an SSH app.
 
 ## What it does
 
@@ -168,6 +168,53 @@ The UI flow it drives, from the app: Advanced tab → Model v3 → type each tag
 into "Search for styles" and pick the match → Custom Lyrics + paste, or Auto
 Lyrics → Style Strength → Generate → watch the Library for the two new songs.
 
+## Running it without owning a computer
+
+Two separate problems, and it's worth not confusing them:
+
+| | Needs | How long |
+| --- | --- | --- |
+| Capturing the request | a desktop browser with dev tools | once, ~5 min |
+| Running the scheduler | a machine that stays on | forever |
+
+A borrowed laptop only solves the first. So use those five minutes to do
+*both* — capture the request **and** stand up a VPS — then hand the laptop
+back and drive everything from your phone.
+
+On the borrowed laptop:
+
+```
+# 1. capture (see above), then point it at a fresh Debian/Ubuntu VPS
+scp .treblo-secrets.json treblo/request.json root@YOUR_VPS:/tmp/
+ssh root@YOUR_VPS 'bash -s' < deploy/setup.sh
+```
+
+`deploy/setup.sh` installs Python, clones the repo, creates an unprivileged
+`treblo` user, moves your credentials into place with 0600 and shreds the
+copy in /tmp, and installs a systemd service set to restart on failure and
+come back after reboot. Then:
+
+```
+nano /etc/treblo.env     # set TREBLO_STATUS_URL and your tags
+systemctl start treblo
+```
+
+Laptop can go back. From your phone, with any SSH client (Termius, Blink,
+Terminus):
+
+```
+systemctl status treblo
+journalctl -u treblo -f
+/opt/treblo/.venv/bin/python -m treblo.cli --db /var/lib/treblo/treblo.db status
+```
+
+**The one thing that will need you again:** Treblo session cookies expire.
+When that happens the service logs exactly what to do rather than failing
+quietly, because no amount of retrying fixes an expired cookie — it needs a
+fresh capture. Expect to borrow a laptop again for two minutes whenever it
+happens. How often depends on how long Treblo's sessions last, which you'll
+only learn by running it.
+
 ## Better lyrics
 
 `TemplateSource` is a stand-in — it builds bars combinatorially so the pipeline
@@ -198,6 +245,8 @@ treblo/session.py     hand-driven login, saved session reuse
 treblo/cli.py         command line
 scripts/from_curl.py           capture -> request template
 scripts/discover_selectors.py  browser-automation fallback
+deploy/setup.sh                one-shot VPS install
+deploy/treblo.service          systemd unit
 ```
 
-Tests: `python -m pytest tests -q` (72 tests).
+Tests: `python -m pytest tests -q` (76 tests).
