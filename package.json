@@ -1,0 +1,19 @@
+{
+  "name": "kennel",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "KENNEL - asynchronous auto-racer / creature husbandry sim. Phase 1: headless simulation.",
+  "engines": {
+    "node": ">=22.6"
+  },
+  "scripts": {
+    "race": "node src/cli.ts",
+    "test": "node --test \"test/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "typescript": "^5.9.3"
+  }
+}
